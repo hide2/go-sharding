@@ -8,11 +8,11 @@ export PATH=$PATH:/usr/local/go/bin
 # Sharding Config
 sharding.yml
 ```
-databases:
-  - root:root@127.0.0.1:3306/my_db_0
-  - root:root@127.0.0.1:3306/my_db_1
-  - root:root@127.0.0.1:3306/my_db_2
-  - root:root@127.0.0.1:3306/my_db_3
+datasources:
+  - root:root@tcp(127.0.0.1:3306)/my_db_0
+  - root:root@tcp(127.0.0.1:3306)/my_db_1
+  - root:root@tcp(127.0.0.1:3306)/my_db_2
+  - root:root@tcp(127.0.0.1:3306)/my_db_3
 
 table_number: 256
 sharding_column: uid
