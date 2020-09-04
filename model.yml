@@ -1,0 +1,9 @@
+models:
+  - model: User
+    name: string
+    created_at: time.Time
+
+  - model: Event
+    name: string
+    uid: int64
+    created_at: time.Time

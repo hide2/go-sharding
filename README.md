@@ -4,26 +4,42 @@ sudo rm -fr /usr/local/go
 Download & Install MacOS pkg from https://golang.org/dl/
 export PATH=$PATH:/usr/local/go/bin
 ```
+# Usage
+Define Datasources in datasource.yml
+``` yml
+datasources:
+  - name: default
+    write: root:root@tcp(127.0.0.1:3306)/my_db_0?charset=utf8mb4&parseTime=True
+    read: root:root@tcp(127.0.0.1:3306)/my_db_0?charset=utf8mb4&parseTime=True
+
+  - name: ds_2
+    write: root:root@tcp(127.0.0.1:3306)/my_db_0?charset=utf8mb4&parseTime=True
+    read: root:root@tcp(127.0.0.1:3306)/my_db_0?charset=utf8mb4&parseTime=True
+
+sql_log: false
+slow_sql_log: 2
+```
+Define Models in model.yml
+``` yml
+models:
+  - model: User
+    name: string
+    created_at: time.Time
+
+  - model: Event
+    name: string
+    uid: int64
+    created_at: time.Time
+```
+Generate Model go files
+```
+go run gen.go
+```
+Which will generate Model files
 
 # Sharding Config
 sharding.yml
 ```
-datasources:
-  - root:root@tcp(127.0.0.1:3306)/my_db_0
-  - root:root@tcp(127.0.0.1:3306)/my_db_1
-  - root:root@tcp(127.0.0.1:3306)/my_db_2
-  - root:root@tcp(127.0.0.1:3306)/my_db_3
-
-table_number: 256
+sharding_table_number: 256
 sharding_column: uid
-```
-
-# Compile
-```
-
-```
-
-# Run Test
-```
-
 ```
