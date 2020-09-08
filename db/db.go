@@ -12,10 +12,12 @@ import (
 )
 
 type Datasources struct {
-	Datasources    []Datasource `yaml:"datasources,flow"`
-	SqlLog         bool         `yaml:"sql_log"`
-	SlowSqlLog     int          `yaml:"slow_sql_log"`
-	ShardingNodeId int64        `yaml:"sharding_node_id"`
+	Datasources        []Datasource `yaml:"datasources,flow"`
+	SqlLog             bool         `yaml:"sql_log"`
+	SlowSqlLog         int          `yaml:"slow_sql_log"`
+	ShardingTableNumer int          `yaml:"sharding_table_number"`
+	ShardingColumn     string       `yaml:"sharding_column"`
+	ShardingNodeId     int64        `yaml:"sharding_node_id"`
 }
 
 type Datasource struct {
@@ -28,6 +30,8 @@ var DBPool = make(map[string]map[string]*sql.DB)
 
 var GoOrmSqlLog = false
 var GoOrmSlowSqlLog = 0
+var GoShardingTableNumer int
+var GoShardingColumn string
 var GoShardingNodeId int64
 var node *snowflake.Node
 
@@ -41,6 +45,8 @@ func init() {
 	}
 	GoOrmSqlLog = dss.SqlLog
 	GoOrmSlowSqlLog = dss.SlowSqlLog
+	GoShardingTableNumer = dss.ShardingTableNumer
+	GoShardingColumn = dss.ShardingColumn
 	GoShardingNodeId = dss.ShardingNodeId
 	for _, ds := range dss.Datasources {
 		wdb, err := sql.Open("mysql", ds.Write)
@@ -63,11 +69,23 @@ func init() {
 		DBPool[ds.Name]["r"] = rdb
 	}
 
+	fmt.Println("=== Datasource initialized!")
+	for i, ds := range dss.Datasources {
+		fmt.Println("DS", i, ds.Name)
+		fmt.Println("Write", ds.Write)
+		fmt.Println("Read", ds.Read)
+	}
+	fmt.Println("SqlLog", dss.SqlLog)
+	fmt.Println("SlowSqlLog", dss.SlowSqlLog)
+	fmt.Println("ShardingTableNumer", dss.ShardingTableNumer)
+	fmt.Println("ShardingColumn", dss.ShardingColumn)
+	fmt.Println("ShardingNodeId", dss.ShardingNodeId)
+
 	node, err = snowflake.NewNode(GoShardingNodeId)
 	if err != nil {
 		fmt.Printf("Error creating NewNode, %s\n", err)
 	} else {
-		fmt.Printf("Snowflake Node %d initialized!\n", GoShardingNodeId)
+		fmt.Printf("=== Snowflake Node %d initialized!\n", GoShardingNodeId)
 	}
 }
 

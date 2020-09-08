@@ -1,29 +1,29 @@
-
 package model
 
 import (
 	. "database/sql"
-	. "github.com/hide2/go-sharding/db"
-	. "github.com/hide2/go-sharding/lib"
 	"strings"
 	"time"
+
+	. "github.com/hide2/go-sharding/db"
+	. "github.com/hide2/go-sharding/lib"
 
 	"fmt"
 )
 
 type UserModel struct {
-	OdB        string
-	Lmt        int
-	Ofs        int
-	
+	OdB string
+	Lmt int
+	Ofs int
+
 	Datasource string
 	Table      string
 	AutoID     string
 	Trx        *Tx
 	ID         int64
 
-	Uid int64
-	Name string
+	Uid       int64
+	Name      string
 	CreatedAt time.Time
 }
 
@@ -140,7 +140,7 @@ func (m *UserModel) Save() (*UserModel, error) {
 			}
 		}
 		return m, m.Update(uprops, conds)
-	// Create
+		// Create
 	} else {
 		sql := "INSERT INTO user(uid,name,created_at) VALUES(?,?,?)"
 		if GoOrmSqlLog {
@@ -171,7 +171,7 @@ func (m *UserModel) Where(conds map[string]interface{}) ([]*UserModel, error) {
 	wherestr := make([]string, 0)
 	cvs := make([]interface{}, 0)
 	for k, v := range conds {
-		wherestr = append(wherestr, k + "=?")
+		wherestr = append(wherestr, k+"=?")
 		cvs = append(cvs, v)
 	}
 	sql := fmt.Sprintf("SELECT * FROM user WHERE %s", strings.Join(wherestr, " AND "))
@@ -215,10 +215,11 @@ func (m *UserModel) Where(conds map[string]interface{}) ([]*UserModel, error) {
 }
 
 func (m *UserModel) Create(props map[string]interface{}) (*UserModel, error) {
-	db := DBPool[m.Datasource]["w"]
 	if m.AutoID != "" {
 		props[m.AutoID] = GenUUID()
 	}
+	// todo 根据sharding_column选择datasource
+	db := DBPool[m.Datasource]["w"]
 	keys := make([]string, 0)
 	values := make([]interface{}, 0)
 	for k, v := range props {
@@ -290,16 +291,19 @@ func (m *UserModel) Destroy(id int64) error {
 }
 
 func (m *UserModel) Update(props map[string]interface{}, conds map[string]interface{}) error {
-	db := DBPool[m.Datasource]["w"]
+	if _, ok := map[GoShardingColumn]; ok {
+		// todo 根据sharding_column选择datasource
+		db := DBPool[m.Datasource]["w"]
+	}
 	setstr := make([]string, 0)
 	wherestr := make([]string, 0)
 	cvs := make([]interface{}, 0)
 	for k, v := range props {
-		setstr = append(setstr, k + "=?")
+		setstr = append(setstr, k+"=?")
 		cvs = append(cvs, v)
 	}
 	for k, v := range conds {
-		wherestr = append(wherestr, k + "=?")
+		wherestr = append(wherestr, k+"=?")
 		cvs = append(cvs, v)
 	}
 	sql := fmt.Sprintf("UPDATE user SET %s WHERE %s", strings.Join(setstr, ", "), strings.Join(wherestr, " AND "))
@@ -348,7 +352,7 @@ func (m *UserModel) Count(conds map[string]interface{}) (int, error) {
 	wherestr := make([]string, 0)
 	cvs := make([]interface{}, 0)
 	for k, v := range conds {
-		wherestr = append(wherestr, k + "=?")
+		wherestr = append(wherestr, k+"=?")
 		cvs = append(cvs, v)
 	}
 	sql := fmt.Sprintf("SELECT count(1) FROM user WHERE %s", strings.Join(wherestr, " AND "))
@@ -426,7 +430,7 @@ func (m *UserModel) Limit(l int) *UserModel {
 }
 
 func (m *UserModel) Page(page int, size int) *UserModel {
-	m.Ofs = (page - 1)*size
+	m.Ofs = (page - 1) * size
 	m.Lmt = size
 	return m
 }
