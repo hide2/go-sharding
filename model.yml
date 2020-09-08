@@ -1,9 +1,10 @@
 models:
   - model: User
+    uid: int64|auto
     name: string
     created_at: time.Time
 
   - model: Event
-    name: string
     uid: int64
+    event: string
     created_at: time.Time

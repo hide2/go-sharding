@@ -5,6 +5,7 @@ import (
 	. "database/sql"
 	. "github.com/hide2/go-sharding/db"
 	. "github.com/hide2/go-sharding/lib"
+	. "github.com/hide2/go-sharding/snowflake"
 	"strings"
 	"time"
 
@@ -18,11 +19,12 @@ type EventModel struct {
 	
 	Datasource string
 	Table      string
+	AutoID     string
 	Trx        *Tx
 	ID         int64
 
-	Name string
 	Uid int64
+	Event string
 	CreatedAt time.Time
 }
 
@@ -83,8 +85,8 @@ func (m *EventModel) CreateTable() error {
 	sql := `CREATE TABLE event (
 		id BIGINT AUTO_INCREMENT,
 
-		name VARCHAR(255),
 		uid BIGINT,
+		event VARCHAR(255),
 		created_at DATETIME,
 		PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`
@@ -116,7 +118,7 @@ func (m *EventModel) Find(id int64) (*EventModel, error) {
 	}
 	st := time.Now().UnixNano() / 1e6
 	row := db.QueryRow(sql, id)
-	if err := row.Scan(&m.ID, &m.Name, &m.Uid, &m.CreatedAt); err != nil {
+	if err := row.Scan(&m.ID, &m.Uid, &m.Event, &m.CreatedAt); err != nil {
 		return nil, err
 	}
 	e := time.Now().UnixNano()/1e6 - st
@@ -141,12 +143,12 @@ func (m *EventModel) Save() (*EventModel, error) {
 		return m, m.Update(uprops, conds)
 	// Create
 	} else {
-		sql := "INSERT INTO event(name,uid,created_at) VALUES(?,?,?)"
+		sql := "INSERT INTO event(uid,event,created_at) VALUES(?,?,?)"
 		if GoOrmSqlLog {
-			fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, m.Name, m.Uid, m.CreatedAt)
+			fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, m.Uid, m.Event, m.CreatedAt)
 		}
 		st := time.Now().UnixNano() / 1e6
-		result, err := db.Exec(sql, m.Name, m.Uid, m.CreatedAt)
+		result, err := db.Exec(sql, m.Uid, m.Event, m.CreatedAt)
 		if err != nil {
 			fmt.Printf("Insert data failed, err:%v\n", err)
 			return nil, err
@@ -200,7 +202,7 @@ func (m *EventModel) Where(conds map[string]interface{}) ([]*EventModel, error) 
 	ms := make([]*EventModel, 0)
 	for rows.Next() {
 		m = new(EventModel)
-		err = rows.Scan(&m.ID, &m.Name, &m.Uid, &m.CreatedAt) //不scan会导致连接不释放
+		err = rows.Scan(&m.ID, &m.Uid, &m.Event, &m.CreatedAt) //不scan会导致连接不释放
 		if err != nil {
 			return nil, err
 		}
@@ -393,7 +395,7 @@ func (m *EventModel) All() ([]*EventModel, error) {
 	ms := make([]*EventModel, 0)
 	for rows.Next() {
 		m = new(EventModel)
-		err = rows.Scan(&m.ID, &m.Name, &m.Uid, &m.CreatedAt) //不scan会导致连接不释放
+		err = rows.Scan(&m.ID, &m.Uid, &m.Event, &m.CreatedAt) //不scan会导致连接不释放
 		if err != nil {
 			return nil, err
 		}
@@ -427,4 +429,4 @@ func (m *EventModel) Page(page int, size int) *EventModel {
 	return m
 }
 
-var Event = EventModel{Datasource: "default", Table: "event"}
+var Event = EventModel{Datasource: "default", Table: "event", AutoID: ""}

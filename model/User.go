@@ -5,6 +5,7 @@ import (
 	. "database/sql"
 	. "github.com/hide2/go-sharding/db"
 	. "github.com/hide2/go-sharding/lib"
+	. "github.com/hide2/go-sharding/snowflake"
 	"strings"
 	"time"
 
@@ -18,9 +19,11 @@ type UserModel struct {
 	
 	Datasource string
 	Table      string
+	AutoID     string
 	Trx        *Tx
 	ID         int64
 
+	Uid int64
 	Name string
 	CreatedAt time.Time
 }
@@ -82,6 +85,7 @@ func (m *UserModel) CreateTable() error {
 	sql := `CREATE TABLE user (
 		id BIGINT AUTO_INCREMENT,
 
+		uid BIGINT,
 		name VARCHAR(255),
 		created_at DATETIME,
 		PRIMARY KEY (id)
@@ -114,7 +118,7 @@ func (m *UserModel) Find(id int64) (*UserModel, error) {
 	}
 	st := time.Now().UnixNano() / 1e6
 	row := db.QueryRow(sql, id)
-	if err := row.Scan(&m.ID, &m.Name, &m.CreatedAt); err != nil {
+	if err := row.Scan(&m.ID, &m.Uid, &m.Name, &m.CreatedAt); err != nil {
 		return nil, err
 	}
 	e := time.Now().UnixNano()/1e6 - st
@@ -139,12 +143,12 @@ func (m *UserModel) Save() (*UserModel, error) {
 		return m, m.Update(uprops, conds)
 	// Create
 	} else {
-		sql := "INSERT INTO user(name,created_at) VALUES(?,?)"
+		sql := "INSERT INTO user(uid,name,created_at) VALUES(?,?,?)"
 		if GoOrmSqlLog {
-			fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, m.Name, m.CreatedAt)
+			fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, m.Uid, m.Name, m.CreatedAt)
 		}
 		st := time.Now().UnixNano() / 1e6
-		result, err := db.Exec(sql, m.Name, m.CreatedAt)
+		result, err := db.Exec(sql, m.Uid, m.Name, m.CreatedAt)
 		if err != nil {
 			fmt.Printf("Insert data failed, err:%v\n", err)
 			return nil, err
@@ -198,7 +202,7 @@ func (m *UserModel) Where(conds map[string]interface{}) ([]*UserModel, error) {
 	ms := make([]*UserModel, 0)
 	for rows.Next() {
 		m = new(UserModel)
-		err = rows.Scan(&m.ID, &m.Name, &m.CreatedAt) //不scan会导致连接不释放
+		err = rows.Scan(&m.ID, &m.Uid, &m.Name, &m.CreatedAt) //不scan会导致连接不释放
 		if err != nil {
 			return nil, err
 		}
@@ -391,7 +395,7 @@ func (m *UserModel) All() ([]*UserModel, error) {
 	ms := make([]*UserModel, 0)
 	for rows.Next() {
 		m = new(UserModel)
-		err = rows.Scan(&m.ID, &m.Name, &m.CreatedAt) //不scan会导致连接不释放
+		err = rows.Scan(&m.ID, &m.Uid, &m.Name, &m.CreatedAt) //不scan会导致连接不释放
 		if err != nil {
 			return nil, err
 		}
@@ -425,4 +429,4 @@ func (m *UserModel) Page(page int, size int) *UserModel {
 	return m
 }
 
-var User = UserModel{Datasource: "default", Table: "user"}
+var User = UserModel{Datasource: "default", Table: "user", AutoID: "uid"}

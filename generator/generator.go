@@ -21,6 +21,7 @@ import (
 	. "database/sql"
 	. "github.com/hide2/go-sharding/db"
 	. "github.com/hide2/go-sharding/lib"
+	. "github.com/hide2/go-sharding/snowflake"
 	"strings"
 	"time"
 {{ range $i, $m := .Imports }}
@@ -35,6 +36,7 @@ type {{.Model}}Model struct {
 	
 	Datasource string
 	Table      string
+	AutoID     string
 	Trx        *Tx
 	ID         int64
 {{ range $i, $k := .Attrs }}
@@ -442,7 +444,7 @@ func (m *{{.Model}}Model) Page(page int, size int) *{{.Model}}Model {
 	return m
 }
 
-var {{.Model}} = {{.Model}}Model{Datasource: "default", Table: "{{.Table}}"}
+var {{.Model}} = {{.Model}}Model{Datasource: "default", Table: "{{.Table}}", AutoID: "{{.AutoID}}"}
 `
 
 var inputConfigFile = flag.String("file", "model.yml", "Input model config yaml file")
@@ -458,6 +460,7 @@ type ModelAttr struct {
 	InsertSQL  string
 	InsertArgs string
 	ScanStr    string
+	AutoID     string
 }
 
 func Gen() {
@@ -480,16 +483,24 @@ func Gen() {
 		values := make([]string, 0)
 		columns := make([]string, 0)
 		imports = append(imports, "fmt")
+		autoid := ""
 		for _, v := range j {
 			if v.Key != "model" {
 				attrs = append(attrs, Camelize(v.Key.(string)))
 				keys = append(keys, v.Key.(string))
-				values = append(values, v.Value.(string))
 				c := v.Value.(string)
+				if c == "int64|auto" {
+					values = append(values, "int64")
+				} else {
+					values = append(values, c)
+				}
 				if c == "string" {
 					c = "VARCHAR(255)"
 				} else if c == "int64" {
 					c = "BIGINT"
+				} else if c == "int64|auto" {
+					c = "BIGINT"
+					autoid = v.Key.(string)
 				} else if c == "time.Time" {
 					c = "DATETIME"
 					// imports = append(imports, "time")
@@ -521,10 +532,10 @@ func Gen() {
 		iarg := strings.Join(iargs, ", ")
 		scanstr := strings.Join(scans, ", ")
 		isql := fmt.Sprintf("INSERT INTO %s(%s) VALUES(%s)", table, cstr, ph)
-		m := ModelAttr{modelname, table, imports, attrs, keys, values, columns, isql, iarg, scanstr}
+		m := ModelAttr{modelname, table, imports, attrs, keys, values, columns, isql, iarg, scanstr, autoid}
 		var b bytes.Buffer
 		t.Execute(&b, m)
-		fmt.Println(b.String())
+		// fmt.Println(b.String())
 
 		// Write to file
 		f, err := os.Create(filename)
