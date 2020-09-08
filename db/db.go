@@ -7,13 +7,15 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/hide2/go-sharding/snowflake"
 	"gopkg.in/yaml.v2"
 )
 
 type Datasources struct {
-	Datasources []Datasource `yaml:"datasources,flow"`
-	SqlLog      bool         `yaml:"sql_log"`
-	SlowSqlLog  int          `yaml:"slow_sql_log"`
+	Datasources    []Datasource `yaml:"datasources,flow"`
+	SqlLog         bool         `yaml:"sql_log"`
+	SlowSqlLog     int          `yaml:"slow_sql_log"`
+	ShardingNodeId int64        `yaml:"sharding_node_id"`
 }
 
 type Datasource struct {
@@ -26,6 +28,8 @@ var DBPool = make(map[string]map[string]*sql.DB)
 
 var GoOrmSqlLog = false
 var GoOrmSlowSqlLog = 0
+var GoShardingNodeId int64
+var node *snowflake.Node
 
 // Init DBPool
 func init() {
@@ -37,6 +41,7 @@ func init() {
 	}
 	GoOrmSqlLog = dss.SqlLog
 	GoOrmSlowSqlLog = dss.SlowSqlLog
+	GoShardingNodeId = dss.ShardingNodeId
 	for _, ds := range dss.Datasources {
 		wdb, err := sql.Open("mysql", ds.Write)
 		if err != nil {
@@ -57,4 +62,15 @@ func init() {
 		DBPool[ds.Name]["w"] = wdb
 		DBPool[ds.Name]["r"] = rdb
 	}
+
+	node, err = snowflake.NewNode(GoShardingNodeId)
+	if err != nil {
+		fmt.Printf("Error creating NewNode, %s\n", err)
+	} else {
+		fmt.Printf("Snowflake Node %d initialized!\n", GoShardingNodeId)
+	}
+}
+
+func GenUUID() int64 {
+	return node.Generate().Int64()
 }

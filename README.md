@@ -42,6 +42,7 @@ slow_sql_log: 2
 
 sharding_table_number: 256
 sharding_column: uid
+sharding_node_id: 1 (0~1023)
 ```
 Define Models in model.yml
 ``` yml

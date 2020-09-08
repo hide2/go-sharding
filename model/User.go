@@ -5,7 +5,6 @@ import (
 	. "database/sql"
 	. "github.com/hide2/go-sharding/db"
 	. "github.com/hide2/go-sharding/lib"
-	. "github.com/hide2/go-sharding/snowflake"
 	"strings"
 	"time"
 
@@ -217,6 +216,9 @@ func (m *UserModel) Where(conds map[string]interface{}) ([]*UserModel, error) {
 
 func (m *UserModel) Create(props map[string]interface{}) (*UserModel, error) {
 	db := DBPool[m.Datasource]["w"]
+	if m.AutoID != "" {
+		props[m.AutoID] = GenUUID()
+	}
 	keys := make([]string, 0)
 	values := make([]interface{}, 0)
 	for k, v := range props {
