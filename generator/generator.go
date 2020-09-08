@@ -1,4 +1,20 @@
+package generator
 
+import (
+	"bytes"
+	"flag"
+	"fmt"
+	"io/ioutil"
+	"os"
+	"strings"
+	"text/template"
+
+	. "github.com/hide2/go-sharding/lib"
+
+	"gopkg.in/yaml.v2"
+)
+
+const GOORMTEMPLATE = `
 package model
 
 import (
@@ -7,11 +23,12 @@ import (
 	. "github.com/hide2/go-sharding/lib"
 	"strings"
 	"time"
-
-	"fmt"
+{{ range $i, $m := .Imports }}
+	"{{$m}}"
+{{- end }}
 )
 
-type UserModel struct {
+type {{.Model}}Model struct {
 	OdB        string
 	Lmt        int
 	Ofs        int
@@ -20,12 +37,12 @@ type UserModel struct {
 	Table      string
 	Trx        *Tx
 	ID         int64
-
-	Name string
-	CreatedAt time.Time
+{{ range $i, $k := .Attrs }}
+	{{$k}} {{index $.Values $i}}
+{{- end }}
 }
 
-func (m *UserModel) Begin() (*Tx, error) {
+func (m *{{.Model}}Model) Begin() (*Tx, error) {
 	db := DBPool[m.Datasource]["w"]
 	sql := "BEGIN"
 	if GoOrmSqlLog {
@@ -36,7 +53,7 @@ func (m *UserModel) Begin() (*Tx, error) {
 	return tx, err
 }
 
-func (m *UserModel) Commit() error {
+func (m *{{.Model}}Model) Commit() error {
 	if m.Trx != nil {
 		sql := "COMMIT"
 		if GoOrmSqlLog {
@@ -48,7 +65,7 @@ func (m *UserModel) Commit() error {
 	return nil
 }
 
-func (m *UserModel) Rollback() error {
+func (m *{{.Model}}Model) Rollback() error {
 	if m.Trx != nil {
 		sql := "ROLLBACK"
 		if GoOrmSqlLog {
@@ -60,7 +77,7 @@ func (m *UserModel) Rollback() error {
 	return nil
 }
 
-func (m *UserModel) Exec(sql string) error {
+func (m *{{.Model}}Model) Exec(sql string) error {
 	db := DBPool[m.Datasource]["w"]
 	if GoOrmSqlLog {
 		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql)
@@ -77,15 +94,15 @@ func (m *UserModel) Exec(sql string) error {
 	return nil
 }
 
-func (m *UserModel) CreateTable() error {
+func (m *{{.Model}}Model) CreateTable() error {
 	db := DBPool[m.Datasource]["w"]
-	sql := `CREATE TABLE user (
+	sql := ` + "`" + `CREATE TABLE {{.Table}} (
 		id BIGINT AUTO_INCREMENT,
-
-		name VARCHAR(255),
-		created_at DATETIME,
+{{ range $i, $k := .Keys }}
+		{{$k}} {{index $.Columns $i}},
+{{- end }}
 		PRIMARY KEY (id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;` + "`" + `
 	if GoOrmSqlLog {
 		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql)
 	}
@@ -101,20 +118,20 @@ func (m *UserModel) CreateTable() error {
 	return nil
 }
 
-func (m *UserModel) New() *UserModel {
-	n := UserModel{Datasource: "default", Table: "user"}
+func (m *{{.Model}}Model) New() *{{.Model}}Model {
+	n := {{.Model}}Model{Datasource: "default", Table: "{{.Table}}"}
 	return &n
 }
 
-func (m *UserModel) Find(id int64) (*UserModel, error) {
+func (m *{{.Model}}Model) Find(id int64) (*{{.Model}}Model, error) {
 	db := DBPool[m.Datasource]["r"]
-	sql := "SELECT * FROM user WHERE id = ?"
+	sql := "SELECT * FROM {{.Table}} WHERE id = ?"
 	if GoOrmSqlLog {
 		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, id)
 	}
 	st := time.Now().UnixNano() / 1e6
 	row := db.QueryRow(sql, id)
-	if err := row.Scan(&m.ID, &m.Name, &m.CreatedAt); err != nil {
+	if err := row.Scan({{.ScanStr}}); err != nil {
 		return nil, err
 	}
 	e := time.Now().UnixNano()/1e6 - st
@@ -124,7 +141,7 @@ func (m *UserModel) Find(id int64) (*UserModel, error) {
 	return m, nil
 }
 
-func (m *UserModel) Save() (*UserModel, error) {
+func (m *{{.Model}}Model) Save() (*{{.Model}}Model, error) {
 	db := DBPool[m.Datasource]["w"]
 	// Update
 	if m.ID > 0 {
@@ -139,12 +156,12 @@ func (m *UserModel) Save() (*UserModel, error) {
 		return m, m.Update(uprops, conds)
 	// Create
 	} else {
-		sql := "INSERT INTO user(name,created_at) VALUES(?,?)"
+		sql := "{{.InsertSQL}}"
 		if GoOrmSqlLog {
-			fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, m.Name, m.CreatedAt)
+			fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, {{.InsertArgs}})
 		}
 		st := time.Now().UnixNano() / 1e6
-		result, err := db.Exec(sql, m.Name, m.CreatedAt)
+		result, err := db.Exec(sql, {{.InsertArgs}})
 		if err != nil {
 			fmt.Printf("Insert data failed, err:%v\n", err)
 			return nil, err
@@ -163,7 +180,7 @@ func (m *UserModel) Save() (*UserModel, error) {
 	return m, nil
 }
 
-func (m *UserModel) Where(conds map[string]interface{}) ([]*UserModel, error) {
+func (m *{{.Model}}Model) Where(conds map[string]interface{}) ([]*{{.Model}}Model, error) {
 	db := DBPool[m.Datasource]["r"]
 	wherestr := make([]string, 0)
 	cvs := make([]interface{}, 0)
@@ -171,7 +188,7 @@ func (m *UserModel) Where(conds map[string]interface{}) ([]*UserModel, error) {
 		wherestr = append(wherestr, k + "=?")
 		cvs = append(cvs, v)
 	}
-	sql := fmt.Sprintf("SELECT * FROM user WHERE %s", strings.Join(wherestr, " AND "))
+	sql := fmt.Sprintf("SELECT * FROM {{.Table}} WHERE %s", strings.Join(wherestr, " AND "))
 	if m.OdB != "" {
 		sql = sql + " ORDER BY " + m.OdB
 	}
@@ -195,10 +212,10 @@ func (m *UserModel) Where(conds map[string]interface{}) ([]*UserModel, error) {
 		fmt.Printf("Query data failed, err:%v\n", err)
 		return nil, err
 	}
-	ms := make([]*UserModel, 0)
+	ms := make([]*{{.Model}}Model, 0)
 	for rows.Next() {
-		m = new(UserModel)
-		err = rows.Scan(&m.ID, &m.Name, &m.CreatedAt) //不scan会导致连接不释放
+		m = new({{.Model}}Model)
+		err = rows.Scan({{.ScanStr}}) //不scan会导致连接不释放
 		if err != nil {
 			return nil, err
 		}
@@ -211,7 +228,7 @@ func (m *UserModel) Where(conds map[string]interface{}) ([]*UserModel, error) {
 	return ms, nil
 }
 
-func (m *UserModel) Create(props map[string]interface{}) (*UserModel, error) {
+func (m *{{.Model}}Model) Create(props map[string]interface{}) (*{{.Model}}Model, error) {
 	db := DBPool[m.Datasource]["w"]
 	keys := make([]string, 0)
 	values := make([]interface{}, 0)
@@ -225,7 +242,7 @@ func (m *UserModel) Create(props map[string]interface{}) (*UserModel, error) {
 		phs = append(phs, "?")
 	}
 	ph := strings.Join(phs, ",")
-	sql := fmt.Sprintf("INSERT INTO user(%s) VALUES(%s)", cstr, ph)
+	sql := fmt.Sprintf("INSERT INTO {{.Table}}(%s) VALUES(%s)", cstr, ph)
 
 	if GoOrmSqlLog {
 		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, values)
@@ -254,13 +271,13 @@ func (m *UserModel) Create(props map[string]interface{}) (*UserModel, error) {
 	return m.Find(lastInsertID)
 }
 
-func (m *UserModel) Delete() error {
+func (m *{{.Model}}Model) Delete() error {
 	return m.Destroy(m.ID)
 }
 
-func (m *UserModel) Destroy(id int64) error {
+func (m *{{.Model}}Model) Destroy(id int64) error {
 	db := DBPool[m.Datasource]["w"]
-	sql := "DELETE FROM user WHERE id = ?"
+	sql := "DELETE FROM {{.Table}} WHERE id = ?"
 	if GoOrmSqlLog {
 		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, id)
 	}
@@ -283,7 +300,7 @@ func (m *UserModel) Destroy(id int64) error {
 	return nil
 }
 
-func (m *UserModel) Update(props map[string]interface{}, conds map[string]interface{}) error {
+func (m *{{.Model}}Model) Update(props map[string]interface{}, conds map[string]interface{}) error {
 	db := DBPool[m.Datasource]["w"]
 	setstr := make([]string, 0)
 	wherestr := make([]string, 0)
@@ -296,7 +313,7 @@ func (m *UserModel) Update(props map[string]interface{}, conds map[string]interf
 		wherestr = append(wherestr, k + "=?")
 		cvs = append(cvs, v)
 	}
-	sql := fmt.Sprintf("UPDATE user SET %s WHERE %s", strings.Join(setstr, ", "), strings.Join(wherestr, " AND "))
+	sql := fmt.Sprintf("UPDATE {{.Table}} SET %s WHERE %s", strings.Join(setstr, ", "), strings.Join(wherestr, " AND "))
 	if GoOrmSqlLog {
 		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, cvs)
 	}
@@ -318,9 +335,9 @@ func (m *UserModel) Update(props map[string]interface{}, conds map[string]interf
 	return nil
 }
 
-func (m *UserModel) CountAll() (int, error) {
+func (m *{{.Model}}Model) CountAll() (int, error) {
 	db := DBPool[m.Datasource]["r"]
-	sql := "SELECT count(1) FROM user"
+	sql := "SELECT count(1) FROM {{.Table}}"
 	if GoOrmSqlLog {
 		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql)
 	}
@@ -337,7 +354,7 @@ func (m *UserModel) CountAll() (int, error) {
 	return c, nil
 }
 
-func (m *UserModel) Count(conds map[string]interface{}) (int, error) {
+func (m *{{.Model}}Model) Count(conds map[string]interface{}) (int, error) {
 	db := DBPool[m.Datasource]["r"]
 	wherestr := make([]string, 0)
 	cvs := make([]interface{}, 0)
@@ -345,7 +362,7 @@ func (m *UserModel) Count(conds map[string]interface{}) (int, error) {
 		wherestr = append(wherestr, k + "=?")
 		cvs = append(cvs, v)
 	}
-	sql := fmt.Sprintf("SELECT count(1) FROM user WHERE %s", strings.Join(wherestr, " AND "))
+	sql := fmt.Sprintf("SELECT count(1) FROM {{.Table}} WHERE %s", strings.Join(wherestr, " AND "))
 	if GoOrmSqlLog {
 		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, cvs)
 	}
@@ -362,9 +379,9 @@ func (m *UserModel) Count(conds map[string]interface{}) (int, error) {
 	return c, nil
 }
 
-func (m *UserModel) All() ([]*UserModel, error) {
+func (m *{{.Model}}Model) All() ([]*{{.Model}}Model, error) {
 	db := DBPool[m.Datasource]["r"]
-	sql := "SELECT * FROM user"
+	sql := "SELECT * FROM {{.Table}}"
 	if m.OdB != "" {
 		sql = sql + " ORDER BY " + m.OdB
 	}
@@ -388,10 +405,10 @@ func (m *UserModel) All() ([]*UserModel, error) {
 		fmt.Printf("Query data failed, err:%v\n", err)
 		return nil, err
 	}
-	ms := make([]*UserModel, 0)
+	ms := make([]*{{.Model}}Model, 0)
 	for rows.Next() {
-		m = new(UserModel)
-		err = rows.Scan(&m.ID, &m.Name, &m.CreatedAt) //不scan会导致连接不释放
+		m = new({{.Model}}Model)
+		err = rows.Scan({{.ScanStr}}) //不scan会导致连接不释放
 		if err != nil {
 			return nil, err
 		}
@@ -404,25 +421,124 @@ func (m *UserModel) All() ([]*UserModel, error) {
 	return ms, nil
 }
 
-func (m *UserModel) OrderBy(o string) *UserModel {
+func (m *{{.Model}}Model) OrderBy(o string) *{{.Model}}Model {
 	m.OdB = o
 	return m
 }
 
-func (m *UserModel) Offset(o int) *UserModel {
+func (m *{{.Model}}Model) Offset(o int) *{{.Model}}Model {
 	m.Ofs = o
 	return m
 }
 
-func (m *UserModel) Limit(l int) *UserModel {
+func (m *{{.Model}}Model) Limit(l int) *{{.Model}}Model {
 	m.Lmt = l
 	return m
 }
 
-func (m *UserModel) Page(page int, size int) *UserModel {
+func (m *{{.Model}}Model) Page(page int, size int) *{{.Model}}Model {
 	m.Ofs = (page - 1)*size
 	m.Lmt = size
 	return m
 }
 
-var User = UserModel{Datasource: "default", Table: "user"}
+var {{.Model}} = {{.Model}}Model{Datasource: "default", Table: "{{.Table}}"}
+`
+
+var inputConfigFile = flag.String("file", "model.yml", "Input model config yaml file")
+
+type ModelAttr struct {
+	Model      string
+	Table      string
+	Imports    []string
+	Attrs      []string
+	Keys       []string
+	Values     []string
+	Columns    []string
+	InsertSQL  string
+	InsertArgs string
+	ScanStr    string
+}
+
+func Gen() {
+	flag.Parse()
+	for i := 0; i != flag.NArg(); i++ {
+		fmt.Printf("arg[%d]=%s\n", i, flag.Arg(i))
+	}
+
+	mf, _ := ioutil.ReadFile(*inputConfigFile)
+	ms := make(map[string][]yaml.MapSlice)
+	merr := yaml.Unmarshal(mf, &ms)
+	if merr != nil {
+		fmt.Println("error:", merr)
+	}
+	for _, j := range ms["models"] {
+		var modelname, table, filename string
+		imports := make([]string, 0)
+		attrs := make([]string, 0)
+		keys := make([]string, 0)
+		values := make([]string, 0)
+		columns := make([]string, 0)
+		imports = append(imports, "fmt")
+		for _, v := range j {
+			if v.Key != "model" {
+				attrs = append(attrs, Camelize(v.Key.(string)))
+				keys = append(keys, v.Key.(string))
+				values = append(values, v.Value.(string))
+				c := v.Value.(string)
+				if c == "string" {
+					c = "VARCHAR(255)"
+				} else if c == "int64" {
+					c = "BIGINT"
+				} else if c == "time.Time" {
+					c = "DATETIME"
+					// imports = append(imports, "time")
+				}
+				columns = append(columns, c)
+			} else {
+				modelname = v.Value.(string)
+				table = strings.ToLower(modelname)
+				filename = "model/" + modelname + ".go"
+			}
+		}
+		fmt.Println("-- Generate", filename)
+		t, err := template.New("GOORMTEMPLATE").Parse(GOORMTEMPLATE)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		cstr := strings.Join(keys, ",")
+		phs := make([]string, 0)
+		iargs := make([]string, 0)
+		scans := make([]string, 0)
+		scans = append(scans, "&m.ID")
+		for i := 0; i < len(attrs); i++ {
+			phs = append(phs, "?")
+			iargs = append(iargs, "m."+attrs[i])
+			scans = append(scans, "&m."+attrs[i])
+		}
+		ph := strings.Join(phs, ",")
+		iarg := strings.Join(iargs, ", ")
+		scanstr := strings.Join(scans, ", ")
+		isql := fmt.Sprintf("INSERT INTO %s(%s) VALUES(%s)", table, cstr, ph)
+		m := ModelAttr{modelname, table, imports, attrs, keys, values, columns, isql, iarg, scanstr}
+		var b bytes.Buffer
+		t.Execute(&b, m)
+		fmt.Println(b.String())
+
+		// Write to file
+		f, err := os.Create(filename)
+		if err != nil {
+			fmt.Println("create file: ", err)
+			return
+		}
+		err = t.Execute(f, m)
+		if err != nil {
+			fmt.Print("execute: ", err)
+			return
+		}
+		f.Close()
+
+	}
+
+}

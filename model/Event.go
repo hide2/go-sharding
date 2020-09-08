@@ -3,8 +3,8 @@ package model
 
 import (
 	. "database/sql"
-	. "github.com/hide2/go-orm/db"
-	. "github.com/hide2/go-orm/lib"
+	. "github.com/hide2/go-sharding/db"
+	. "github.com/hide2/go-sharding/lib"
 	"strings"
 	"time"
 
