@@ -1,11 +1,13 @@
 Go-Sharding is a simple Sharding middleware based on GO-ORM(https://github.com/hide2/go-orm)
 
 # Go-Sharding Features
-- Auto create table
+- Auto mapping SQL to Sharding databases & tables
+- Distributed UUID generator based on Snowflake
+- Scaling databases & tables
+- Auto create table scripts
 - Model & CRUD methods generator
 - Connection Pool
 - Write/Read Splitting
-- Auto/Customized mapping of Model and datasource/table
 - SQL log & Slow SQL log for profiling
 
 # Install Go
