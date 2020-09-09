@@ -31,7 +31,7 @@ var DBPool = make(map[string]map[string]*sql.DB)
 var GoShardingSqlLog = false
 var GoShardingSlowSqlLog = 0
 var GoShardingDatasourceNumber = 0
-var GoShardingTableNumer = 0
+var GoShardingTableNumber = 0
 var GoShardingColumn string
 var GoShardingNodeId int64
 var node *snowflake.Node
@@ -46,7 +46,7 @@ func init() {
 	}
 	GoShardingSqlLog = dss.SqlLog
 	GoShardingSlowSqlLog = dss.SlowSqlLog
-	GoShardingTableNumer = dss.ShardingTableNumer
+	GoShardingTableNumber = dss.ShardingTableNumer
 	GoShardingColumn = dss.ShardingColumn
 	GoShardingNodeId = dss.ShardingNodeId
 	for _, ds := range dss.Datasources {
@@ -80,7 +80,7 @@ func init() {
 	fmt.Println("GoShardingSqlLog", GoShardingSqlLog)
 	fmt.Println("GoShardingSlowSqlLog", GoShardingSlowSqlLog)
 	fmt.Println("GoShardingDatasourceNumber", GoShardingDatasourceNumber)
-	fmt.Println("GoShardingTableNumer", GoShardingTableNumer)
+	fmt.Println("GoShardingTableNumber", GoShardingTableNumber)
 	fmt.Println("GoShardingColumn", GoShardingColumn)
 	fmt.Println("GoShardingNodeId", GoShardingNodeId)
 

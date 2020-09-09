@@ -27,8 +27,8 @@ type UserModel struct {
 	CreatedAt time.Time
 }
 
-func (m *UserModel) Begin() (*Tx, error) {
-	db := DBPool[m.Datasource]["w"]
+func (m *UserModel) Begin(ds string) (*Tx, error) {
+	db := DBPool[ds]["w"]
 	sql := "BEGIN"
 	if GoShardingSqlLog {
 		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql)
@@ -63,18 +63,20 @@ func (m *UserModel) Rollback() error {
 }
 
 func (m *UserModel) Exec(sql string) error {
-	db := DBPool[m.Datasource]["w"]
-	if GoShardingSqlLog {
-		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql)
-	}
-	st := time.Now().UnixNano() / 1e6
-	if _, err := db.Exec(sql); err != nil {
-		fmt.Println("Execute sql failed:", err)
-		return err
-	}
-	e := time.Now().UnixNano()/1e6 - st
-	if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
-		fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
+	for i := 0; i < GoShardingDatasourceNumber; i++ {
+		db := DBPool[fmt.Sprintf("ds_%d", i)]["w"]
+		if GoShardingSqlLog {
+			fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql)
+		}
+		st := time.Now().UnixNano() / 1e6
+		if _, err := db.Exec(sql); err != nil {
+			fmt.Println("Execute sql failed:", err)
+			return err
+		}
+		e := time.Now().UnixNano()/1e6 - st
+		if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
+			fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
+		}
 	}
 	return nil
 }
@@ -82,7 +84,7 @@ func (m *UserModel) Exec(sql string) error {
 func (m *UserModel) CreateTable() error {
 	for i := 0; i < GoShardingDatasourceNumber; i++ {
 		db := DBPool[fmt.Sprintf("ds_%d", i)]["w"]
-		for j := 0; j < GoShardingTableNumer; j++ {
+		for j := 0; j < GoShardingTableNumber; j++ {
 			table := fmt.Sprintf("user_%d", j)
 			sql := fmt.Sprintf(`CREATE TABLE %s (
 		id BIGINT AUTO_INCREMENT,
