@@ -28,9 +28,10 @@ type Datasource struct {
 
 var DBPool = make(map[string]map[string]*sql.DB)
 
-var GoOrmSqlLog = false
-var GoOrmSlowSqlLog = 0
-var GoShardingTableNumer int
+var GoShardingSqlLog = false
+var GoShardingSlowSqlLog = 0
+var GoShardingDatasourceNumber = 0
+var GoShardingTableNumer = 0
 var GoShardingColumn string
 var GoShardingNodeId int64
 var node *snowflake.Node
@@ -43,8 +44,8 @@ func init() {
 	if err != nil {
 		fmt.Println("error:", err)
 	}
-	GoOrmSqlLog = dss.SqlLog
-	GoOrmSlowSqlLog = dss.SlowSqlLog
+	GoShardingSqlLog = dss.SqlLog
+	GoShardingSlowSqlLog = dss.SlowSqlLog
 	GoShardingTableNumer = dss.ShardingTableNumer
 	GoShardingColumn = dss.ShardingColumn
 	GoShardingNodeId = dss.ShardingNodeId
@@ -67,6 +68,7 @@ func init() {
 		DBPool[ds.Name] = make(map[string]*sql.DB)
 		DBPool[ds.Name]["w"] = wdb
 		DBPool[ds.Name]["r"] = rdb
+		GoShardingDatasourceNumber = GoShardingDatasourceNumber + 1
 	}
 
 	fmt.Println("=== Datasource initialized!")
@@ -75,11 +77,12 @@ func init() {
 		fmt.Println("Write", ds.Write)
 		fmt.Println("Read", ds.Read)
 	}
-	fmt.Println("SqlLog", dss.SqlLog)
-	fmt.Println("SlowSqlLog", dss.SlowSqlLog)
-	fmt.Println("ShardingTableNumer", dss.ShardingTableNumer)
-	fmt.Println("ShardingColumn", dss.ShardingColumn)
-	fmt.Println("ShardingNodeId", dss.ShardingNodeId)
+	fmt.Println("GoShardingSqlLog", GoShardingSqlLog)
+	fmt.Println("GoShardingSlowSqlLog", GoShardingSlowSqlLog)
+	fmt.Println("GoShardingDatasourceNumber", GoShardingDatasourceNumber)
+	fmt.Println("GoShardingTableNumer", GoShardingTableNumer)
+	fmt.Println("GoShardingColumn", GoShardingColumn)
+	fmt.Println("GoShardingNodeId", GoShardingNodeId)
 
 	node, err = snowflake.NewNode(GoShardingNodeId)
 	if err != nil {

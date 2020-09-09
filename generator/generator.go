@@ -46,7 +46,7 @@ type {{.Model}}Model struct {
 func (m *{{.Model}}Model) Begin() (*Tx, error) {
 	db := DBPool[m.Datasource]["w"]
 	sql := "BEGIN"
-	if GoOrmSqlLog {
+	if GoShardingSqlLog {
 		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql)
 	}
 	tx, err := db.Begin()
@@ -57,7 +57,7 @@ func (m *{{.Model}}Model) Begin() (*Tx, error) {
 func (m *{{.Model}}Model) Commit() error {
 	if m.Trx != nil {
 		sql := "COMMIT"
-		if GoOrmSqlLog {
+		if GoShardingSqlLog {
 			fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql)
 		}
 		return m.Trx.Commit()
@@ -69,7 +69,7 @@ func (m *{{.Model}}Model) Commit() error {
 func (m *{{.Model}}Model) Rollback() error {
 	if m.Trx != nil {
 		sql := "ROLLBACK"
-		if GoOrmSqlLog {
+		if GoShardingSqlLog {
 			fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql)
 		}
 		return m.Trx.Rollback()
@@ -80,7 +80,7 @@ func (m *{{.Model}}Model) Rollback() error {
 
 func (m *{{.Model}}Model) Exec(sql string) error {
 	db := DBPool[m.Datasource]["w"]
-	if GoOrmSqlLog {
+	if GoShardingSqlLog {
 		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql)
 	}
 	st := time.Now().UnixNano() / 1e6
@@ -89,32 +89,37 @@ func (m *{{.Model}}Model) Exec(sql string) error {
 		return err
 	}
 	e := time.Now().UnixNano()/1e6 - st
-	if GoOrmSlowSqlLog > 0 && int(e) >= GoOrmSlowSqlLog {
+	if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
 		fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
 	}
 	return nil
 }
 
 func (m *{{.Model}}Model) CreateTable() error {
-	db := DBPool[m.Datasource]["w"]
-	sql := ` + "`" + `CREATE TABLE {{.Table}} (
+	for i := 0; i < GoShardingDatasourceNumber; i++ {
+		db := DBPool[fmt.Sprintf("ds_%d", i)]["w"]
+		for j := 0; j < GoShardingTableNumer; j++ {
+			table := fmt.Sprintf("{{.Table}}_%d", j)
+			sql := ` + "fmt.Sprintf(`" + `CREATE TABLE %s (
 		id BIGINT AUTO_INCREMENT,
 {{ range $i, $k := .Keys }}
 		{{$k}} {{index $.Columns $i}},
 {{- end }}
 		PRIMARY KEY (id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;` + "`" + `
-	if GoOrmSqlLog {
-		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql)
-	}
-	st := time.Now().UnixNano() / 1e6
-	if _, err := db.Exec(sql); err != nil {
-		fmt.Println("Create table failed:", err)
-		return err
-	}
-	e := time.Now().UnixNano()/1e6 - st
-	if GoOrmSlowSqlLog > 0 && int(e) >= GoOrmSlowSqlLog {
-		fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;` + "`, table)" + `
+			if GoShardingSqlLog {
+				fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql)
+			}
+			st := time.Now().UnixNano() / 1e6
+			if _, err := db.Exec(sql); err != nil {
+				fmt.Println("Create table failed:", err)
+				return err
+			}
+			e := time.Now().UnixNano()/1e6 - st
+			if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
+				fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
+			}
+		}
 	}
 	return nil
 }
@@ -127,7 +132,7 @@ func (m *{{.Model}}Model) New() *{{.Model}}Model {
 func (m *{{.Model}}Model) Find(id int64) (*{{.Model}}Model, error) {
 	db := DBPool[m.Datasource]["r"]
 	sql := "SELECT * FROM {{.Table}} WHERE id = ?"
-	if GoOrmSqlLog {
+	if GoShardingSqlLog {
 		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, id)
 	}
 	st := time.Now().UnixNano() / 1e6
@@ -136,7 +141,7 @@ func (m *{{.Model}}Model) Find(id int64) (*{{.Model}}Model, error) {
 		return nil, err
 	}
 	e := time.Now().UnixNano()/1e6 - st
-	if GoOrmSlowSqlLog > 0 && int(e) >= GoOrmSlowSqlLog {
+	if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
 		fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
 	}
 	return m, nil
@@ -158,7 +163,7 @@ func (m *{{.Model}}Model) Save() (*{{.Model}}Model, error) {
 	// Create
 	} else {
 		sql := "{{.InsertSQL}}"
-		if GoOrmSqlLog {
+		if GoShardingSqlLog {
 			fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, {{.InsertArgs}})
 		}
 		st := time.Now().UnixNano() / 1e6
@@ -174,7 +179,7 @@ func (m *{{.Model}}Model) Save() (*{{.Model}}Model, error) {
 		}
 		m.ID = lastInsertID
 		e := time.Now().UnixNano()/1e6 - st
-		if GoOrmSlowSqlLog > 0 && int(e) >= GoOrmSlowSqlLog {
+		if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
 			fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
 		}
 	}
@@ -199,7 +204,7 @@ func (m *{{.Model}}Model) Where(conds map[string]interface{}) ([]*{{.Model}}Mode
 	if m.Ofs > 0 {
 		sql = sql + fmt.Sprintf(" OFFSET %d", m.Ofs)
 	}
-	if GoOrmSqlLog {
+	if GoShardingSqlLog {
 		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, cvs)
 	}
 	st := time.Now().UnixNano() / 1e6
@@ -223,13 +228,17 @@ func (m *{{.Model}}Model) Where(conds map[string]interface{}) ([]*{{.Model}}Mode
 		ms = append(ms, m)
 	}
 	e := time.Now().UnixNano()/1e6 - st
-	if GoOrmSlowSqlLog > 0 && int(e) >= GoOrmSlowSqlLog {
+	if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
 		fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
 	}
 	return ms, nil
 }
 
 func (m *{{.Model}}Model) Create(props map[string]interface{}) (*{{.Model}}Model, error) {
+	if m.AutoID != "" {
+		props[m.AutoID] = GenUUID()
+	}
+	// todo 根据sharding_column选择datasource
 	db := DBPool[m.Datasource]["w"]
 	if m.AutoID != "" {
 		props[m.AutoID] = GenUUID()
@@ -248,7 +257,7 @@ func (m *{{.Model}}Model) Create(props map[string]interface{}) (*{{.Model}}Model
 	ph := strings.Join(phs, ",")
 	sql := fmt.Sprintf("INSERT INTO {{.Table}}(%s) VALUES(%s)", cstr, ph)
 
-	if GoOrmSqlLog {
+	if GoShardingSqlLog {
 		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, values)
 	}
 	st := time.Now().UnixNano() / 1e6
@@ -269,7 +278,7 @@ func (m *{{.Model}}Model) Create(props map[string]interface{}) (*{{.Model}}Model
 		return nil, err
 	}
 	e := time.Now().UnixNano()/1e6 - st
-	if GoOrmSlowSqlLog > 0 && int(e) >= GoOrmSlowSqlLog {
+	if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
 		fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
 	}
 	return m.Find(lastInsertID)
@@ -282,7 +291,7 @@ func (m *{{.Model}}Model) Delete() error {
 func (m *{{.Model}}Model) Destroy(id int64) error {
 	db := DBPool[m.Datasource]["w"]
 	sql := "DELETE FROM {{.Table}} WHERE id = ?"
-	if GoOrmSqlLog {
+	if GoShardingSqlLog {
 		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, id)
 	}
 	st := time.Now().UnixNano() / 1e6
@@ -298,13 +307,17 @@ func (m *{{.Model}}Model) Destroy(id int64) error {
 	}
 	m.ID = 0
 	e := time.Now().UnixNano()/1e6 - st
-	if GoOrmSlowSqlLog > 0 && int(e) >= GoOrmSlowSqlLog {
+	if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
 		fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
 	}
 	return nil
 }
 
 func (m *{{.Model}}Model) Update(props map[string]interface{}, conds map[string]interface{}) error {
+	if _, ok := conds[GoShardingColumn]; ok {
+		// todo 根据sharding_column选择datasource
+		// db := DBPool[m.Datasource]["w"]
+	}
 	db := DBPool[m.Datasource]["w"]
 	setstr := make([]string, 0)
 	wherestr := make([]string, 0)
@@ -318,7 +331,7 @@ func (m *{{.Model}}Model) Update(props map[string]interface{}, conds map[string]
 		cvs = append(cvs, v)
 	}
 	sql := fmt.Sprintf("UPDATE {{.Table}} SET %s WHERE %s", strings.Join(setstr, ", "), strings.Join(wherestr, " AND "))
-	if GoOrmSqlLog {
+	if GoShardingSqlLog {
 		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, cvs)
 	}
 	st := time.Now().UnixNano() / 1e6
@@ -333,7 +346,7 @@ func (m *{{.Model}}Model) Update(props map[string]interface{}, conds map[string]
 		return err
 	}
 	e := time.Now().UnixNano()/1e6 - st
-	if GoOrmSlowSqlLog > 0 && int(e) >= GoOrmSlowSqlLog {
+	if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
 		fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
 	}
 	return nil
@@ -342,7 +355,7 @@ func (m *{{.Model}}Model) Update(props map[string]interface{}, conds map[string]
 func (m *{{.Model}}Model) CountAll() (int, error) {
 	db := DBPool[m.Datasource]["r"]
 	sql := "SELECT count(1) FROM {{.Table}}"
-	if GoOrmSqlLog {
+	if GoShardingSqlLog {
 		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql)
 	}
 	st := time.Now().UnixNano() / 1e6
@@ -352,7 +365,7 @@ func (m *{{.Model}}Model) CountAll() (int, error) {
 		return 0, err
 	}
 	e := time.Now().UnixNano()/1e6 - st
-	if GoOrmSlowSqlLog > 0 && int(e) >= GoOrmSlowSqlLog {
+	if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
 		fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
 	}
 	return c, nil
@@ -367,7 +380,7 @@ func (m *{{.Model}}Model) Count(conds map[string]interface{}) (int, error) {
 		cvs = append(cvs, v)
 	}
 	sql := fmt.Sprintf("SELECT count(1) FROM {{.Table}} WHERE %s", strings.Join(wherestr, " AND "))
-	if GoOrmSqlLog {
+	if GoShardingSqlLog {
 		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, cvs)
 	}
 	st := time.Now().UnixNano() / 1e6
@@ -377,7 +390,7 @@ func (m *{{.Model}}Model) Count(conds map[string]interface{}) (int, error) {
 		return 0, err
 	}
 	e := time.Now().UnixNano()/1e6 - st
-	if GoOrmSlowSqlLog > 0 && int(e) >= GoOrmSlowSqlLog {
+	if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
 		fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
 	}
 	return c, nil
@@ -395,7 +408,7 @@ func (m *{{.Model}}Model) All() ([]*{{.Model}}Model, error) {
 	if m.Ofs > 0 {
 		sql = sql + fmt.Sprintf(" OFFSET %d", m.Ofs)
 	}
-	if GoOrmSqlLog {
+	if GoShardingSqlLog {
 		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql)
 	}
 	st := time.Now().UnixNano() / 1e6
@@ -419,7 +432,7 @@ func (m *{{.Model}}Model) All() ([]*{{.Model}}Model, error) {
 		ms = append(ms, m)
 	}
 	e := time.Now().UnixNano()/1e6 - st
-	if GoOrmSlowSqlLog > 0 && int(e) >= GoOrmSlowSqlLog {
+	if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
 		fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
 	}
 	return ms, nil

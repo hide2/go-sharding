@@ -1,36 +1,36 @@
+
 package model
 
 import (
 	. "database/sql"
-	"strings"
-	"time"
-
 	. "github.com/hide2/go-sharding/db"
 	. "github.com/hide2/go-sharding/lib"
+	"strings"
+	"time"
 
 	"fmt"
 )
 
 type UserModel struct {
-	OdB string
-	Lmt int
-	Ofs int
-
+	OdB        string
+	Lmt        int
+	Ofs        int
+	
 	Datasource string
 	Table      string
 	AutoID     string
 	Trx        *Tx
 	ID         int64
 
-	Uid       int64
-	Name      string
+	Uid int64
+	Name string
 	CreatedAt time.Time
 }
 
 func (m *UserModel) Begin() (*Tx, error) {
 	db := DBPool[m.Datasource]["w"]
 	sql := "BEGIN"
-	if GoOrmSqlLog {
+	if GoShardingSqlLog {
 		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql)
 	}
 	tx, err := db.Begin()
@@ -41,7 +41,7 @@ func (m *UserModel) Begin() (*Tx, error) {
 func (m *UserModel) Commit() error {
 	if m.Trx != nil {
 		sql := "COMMIT"
-		if GoOrmSqlLog {
+		if GoShardingSqlLog {
 			fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql)
 		}
 		return m.Trx.Commit()
@@ -53,7 +53,7 @@ func (m *UserModel) Commit() error {
 func (m *UserModel) Rollback() error {
 	if m.Trx != nil {
 		sql := "ROLLBACK"
-		if GoOrmSqlLog {
+		if GoShardingSqlLog {
 			fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql)
 		}
 		return m.Trx.Rollback()
@@ -64,7 +64,7 @@ func (m *UserModel) Rollback() error {
 
 func (m *UserModel) Exec(sql string) error {
 	db := DBPool[m.Datasource]["w"]
-	if GoOrmSqlLog {
+	if GoShardingSqlLog {
 		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql)
 	}
 	st := time.Now().UnixNano() / 1e6
@@ -73,33 +73,38 @@ func (m *UserModel) Exec(sql string) error {
 		return err
 	}
 	e := time.Now().UnixNano()/1e6 - st
-	if GoOrmSlowSqlLog > 0 && int(e) >= GoOrmSlowSqlLog {
+	if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
 		fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
 	}
 	return nil
 }
 
 func (m *UserModel) CreateTable() error {
-	db := DBPool[m.Datasource]["w"]
-	sql := `CREATE TABLE user (
+	for i := 0; i < GoShardingDatasourceNumber; i++ {
+		db := DBPool[fmt.Sprintf("ds_%d", i)]["w"]
+		for j := 0; j < GoShardingTableNumer; j++ {
+			table := fmt.Sprintf("user_%d", j)
+			sql := fmt.Sprintf(`CREATE TABLE %s (
 		id BIGINT AUTO_INCREMENT,
 
 		uid BIGINT,
 		name VARCHAR(255),
 		created_at DATETIME,
 		PRIMARY KEY (id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`
-	if GoOrmSqlLog {
-		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql)
-	}
-	st := time.Now().UnixNano() / 1e6
-	if _, err := db.Exec(sql); err != nil {
-		fmt.Println("Create table failed:", err)
-		return err
-	}
-	e := time.Now().UnixNano()/1e6 - st
-	if GoOrmSlowSqlLog > 0 && int(e) >= GoOrmSlowSqlLog {
-		fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`, table)
+			if GoShardingSqlLog {
+				fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql)
+			}
+			st := time.Now().UnixNano() / 1e6
+			if _, err := db.Exec(sql); err != nil {
+				fmt.Println("Create table failed:", err)
+				return err
+			}
+			e := time.Now().UnixNano()/1e6 - st
+			if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
+				fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
+			}
+		}
 	}
 	return nil
 }
@@ -112,7 +117,7 @@ func (m *UserModel) New() *UserModel {
 func (m *UserModel) Find(id int64) (*UserModel, error) {
 	db := DBPool[m.Datasource]["r"]
 	sql := "SELECT * FROM user WHERE id = ?"
-	if GoOrmSqlLog {
+	if GoShardingSqlLog {
 		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, id)
 	}
 	st := time.Now().UnixNano() / 1e6
@@ -121,7 +126,7 @@ func (m *UserModel) Find(id int64) (*UserModel, error) {
 		return nil, err
 	}
 	e := time.Now().UnixNano()/1e6 - st
-	if GoOrmSlowSqlLog > 0 && int(e) >= GoOrmSlowSqlLog {
+	if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
 		fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
 	}
 	return m, nil
@@ -140,10 +145,10 @@ func (m *UserModel) Save() (*UserModel, error) {
 			}
 		}
 		return m, m.Update(uprops, conds)
-		// Create
+	// Create
 	} else {
 		sql := "INSERT INTO user(uid,name,created_at) VALUES(?,?,?)"
-		if GoOrmSqlLog {
+		if GoShardingSqlLog {
 			fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, m.Uid, m.Name, m.CreatedAt)
 		}
 		st := time.Now().UnixNano() / 1e6
@@ -159,7 +164,7 @@ func (m *UserModel) Save() (*UserModel, error) {
 		}
 		m.ID = lastInsertID
 		e := time.Now().UnixNano()/1e6 - st
-		if GoOrmSlowSqlLog > 0 && int(e) >= GoOrmSlowSqlLog {
+		if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
 			fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
 		}
 	}
@@ -171,7 +176,7 @@ func (m *UserModel) Where(conds map[string]interface{}) ([]*UserModel, error) {
 	wherestr := make([]string, 0)
 	cvs := make([]interface{}, 0)
 	for k, v := range conds {
-		wherestr = append(wherestr, k+"=?")
+		wherestr = append(wherestr, k + "=?")
 		cvs = append(cvs, v)
 	}
 	sql := fmt.Sprintf("SELECT * FROM user WHERE %s", strings.Join(wherestr, " AND "))
@@ -184,7 +189,7 @@ func (m *UserModel) Where(conds map[string]interface{}) ([]*UserModel, error) {
 	if m.Ofs > 0 {
 		sql = sql + fmt.Sprintf(" OFFSET %d", m.Ofs)
 	}
-	if GoOrmSqlLog {
+	if GoShardingSqlLog {
 		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, cvs)
 	}
 	st := time.Now().UnixNano() / 1e6
@@ -208,7 +213,7 @@ func (m *UserModel) Where(conds map[string]interface{}) ([]*UserModel, error) {
 		ms = append(ms, m)
 	}
 	e := time.Now().UnixNano()/1e6 - st
-	if GoOrmSlowSqlLog > 0 && int(e) >= GoOrmSlowSqlLog {
+	if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
 		fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
 	}
 	return ms, nil
@@ -220,6 +225,9 @@ func (m *UserModel) Create(props map[string]interface{}) (*UserModel, error) {
 	}
 	// todo 根据sharding_column选择datasource
 	db := DBPool[m.Datasource]["w"]
+	if m.AutoID != "" {
+		props[m.AutoID] = GenUUID()
+	}
 	keys := make([]string, 0)
 	values := make([]interface{}, 0)
 	for k, v := range props {
@@ -234,7 +242,7 @@ func (m *UserModel) Create(props map[string]interface{}) (*UserModel, error) {
 	ph := strings.Join(phs, ",")
 	sql := fmt.Sprintf("INSERT INTO user(%s) VALUES(%s)", cstr, ph)
 
-	if GoOrmSqlLog {
+	if GoShardingSqlLog {
 		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, values)
 	}
 	st := time.Now().UnixNano() / 1e6
@@ -255,7 +263,7 @@ func (m *UserModel) Create(props map[string]interface{}) (*UserModel, error) {
 		return nil, err
 	}
 	e := time.Now().UnixNano()/1e6 - st
-	if GoOrmSlowSqlLog > 0 && int(e) >= GoOrmSlowSqlLog {
+	if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
 		fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
 	}
 	return m.Find(lastInsertID)
@@ -268,7 +276,7 @@ func (m *UserModel) Delete() error {
 func (m *UserModel) Destroy(id int64) error {
 	db := DBPool[m.Datasource]["w"]
 	sql := "DELETE FROM user WHERE id = ?"
-	if GoOrmSqlLog {
+	if GoShardingSqlLog {
 		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, id)
 	}
 	st := time.Now().UnixNano() / 1e6
@@ -284,30 +292,31 @@ func (m *UserModel) Destroy(id int64) error {
 	}
 	m.ID = 0
 	e := time.Now().UnixNano()/1e6 - st
-	if GoOrmSlowSqlLog > 0 && int(e) >= GoOrmSlowSqlLog {
+	if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
 		fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
 	}
 	return nil
 }
 
 func (m *UserModel) Update(props map[string]interface{}, conds map[string]interface{}) error {
-	if _, ok := map[GoShardingColumn]; ok {
+	if _, ok := conds[GoShardingColumn]; ok {
 		// todo 根据sharding_column选择datasource
-		db := DBPool[m.Datasource]["w"]
+		// db := DBPool[m.Datasource]["w"]
 	}
+	db := DBPool[m.Datasource]["w"]
 	setstr := make([]string, 0)
 	wherestr := make([]string, 0)
 	cvs := make([]interface{}, 0)
 	for k, v := range props {
-		setstr = append(setstr, k+"=?")
+		setstr = append(setstr, k + "=?")
 		cvs = append(cvs, v)
 	}
 	for k, v := range conds {
-		wherestr = append(wherestr, k+"=?")
+		wherestr = append(wherestr, k + "=?")
 		cvs = append(cvs, v)
 	}
 	sql := fmt.Sprintf("UPDATE user SET %s WHERE %s", strings.Join(setstr, ", "), strings.Join(wherestr, " AND "))
-	if GoOrmSqlLog {
+	if GoShardingSqlLog {
 		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, cvs)
 	}
 	st := time.Now().UnixNano() / 1e6
@@ -322,7 +331,7 @@ func (m *UserModel) Update(props map[string]interface{}, conds map[string]interf
 		return err
 	}
 	e := time.Now().UnixNano()/1e6 - st
-	if GoOrmSlowSqlLog > 0 && int(e) >= GoOrmSlowSqlLog {
+	if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
 		fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
 	}
 	return nil
@@ -331,7 +340,7 @@ func (m *UserModel) Update(props map[string]interface{}, conds map[string]interf
 func (m *UserModel) CountAll() (int, error) {
 	db := DBPool[m.Datasource]["r"]
 	sql := "SELECT count(1) FROM user"
-	if GoOrmSqlLog {
+	if GoShardingSqlLog {
 		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql)
 	}
 	st := time.Now().UnixNano() / 1e6
@@ -341,7 +350,7 @@ func (m *UserModel) CountAll() (int, error) {
 		return 0, err
 	}
 	e := time.Now().UnixNano()/1e6 - st
-	if GoOrmSlowSqlLog > 0 && int(e) >= GoOrmSlowSqlLog {
+	if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
 		fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
 	}
 	return c, nil
@@ -352,11 +361,11 @@ func (m *UserModel) Count(conds map[string]interface{}) (int, error) {
 	wherestr := make([]string, 0)
 	cvs := make([]interface{}, 0)
 	for k, v := range conds {
-		wherestr = append(wherestr, k+"=?")
+		wherestr = append(wherestr, k + "=?")
 		cvs = append(cvs, v)
 	}
 	sql := fmt.Sprintf("SELECT count(1) FROM user WHERE %s", strings.Join(wherestr, " AND "))
-	if GoOrmSqlLog {
+	if GoShardingSqlLog {
 		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, cvs)
 	}
 	st := time.Now().UnixNano() / 1e6
@@ -366,7 +375,7 @@ func (m *UserModel) Count(conds map[string]interface{}) (int, error) {
 		return 0, err
 	}
 	e := time.Now().UnixNano()/1e6 - st
-	if GoOrmSlowSqlLog > 0 && int(e) >= GoOrmSlowSqlLog {
+	if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
 		fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
 	}
 	return c, nil
@@ -384,7 +393,7 @@ func (m *UserModel) All() ([]*UserModel, error) {
 	if m.Ofs > 0 {
 		sql = sql + fmt.Sprintf(" OFFSET %d", m.Ofs)
 	}
-	if GoOrmSqlLog {
+	if GoShardingSqlLog {
 		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql)
 	}
 	st := time.Now().UnixNano() / 1e6
@@ -408,7 +417,7 @@ func (m *UserModel) All() ([]*UserModel, error) {
 		ms = append(ms, m)
 	}
 	e := time.Now().UnixNano()/1e6 - st
-	if GoOrmSlowSqlLog > 0 && int(e) >= GoOrmSlowSqlLog {
+	if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
 		fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
 	}
 	return ms, nil
@@ -430,7 +439,7 @@ func (m *UserModel) Limit(l int) *UserModel {
 }
 
 func (m *UserModel) Page(page int, size int) *UserModel {
-	m.Ofs = (page - 1) * size
+	m.Ofs = (page - 1)*size
 	m.Lmt = size
 	return m
 }

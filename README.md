@@ -49,10 +49,10 @@ datasources:
     write: root:root@tcp(127.0.0.1:3306)/my_db_3?charset=utf8mb4&parseTime=True
     read: root:root@tcp(127.0.0.1:3306)/my_db_3?charset=utf8mb4&parseTime=True
 
-sql_log: false
-slow_sql_log: 2
+sql_log: true
+slow_sql_log: 500
 
-sharding_table_number: 256
+sharding_table_number: 16
 sharding_column: uid
 sharding_node_id: 1 (0~1023)
 ```
