@@ -49,10 +49,18 @@ datasources:
     write: root:root@tcp(127.0.0.1:3306)/my_db_3?charset=utf8mb4&parseTime=True
     read: root:root@tcp(127.0.0.1:3306)/my_db_3?charset=utf8mb4&parseTime=True
 
-sql_log: true
+  - name: ds_4
+    write: root:root@tcp(127.0.0.1:3306)/my_db_2?charset=utf8mb4&parseTime=True
+    read: root:root@tcp(127.0.0.1:3306)/my_db_2?charset=utf8mb4&parseTime=True
+
+  - name: ds_5
+    write: root:root@tcp(127.0.0.1:3306)/my_db_3?charset=utf8mb4&parseTime=True
+    read: root:root@tcp(127.0.0.1:3306)/my_db_3?charset=utf8mb4&parseTime=True
+
+    sql_log: false
 slow_sql_log: 500
 
-sharding_table_number: 16
+sharding_table_number: 255
 sharding_column: uid
 sharding_node_id: 1 (0~1023)
 ```

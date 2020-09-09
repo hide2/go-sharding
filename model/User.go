@@ -135,9 +135,10 @@ func (m *UserModel) Find(id int64) (*UserModel, error) {
 }
 
 func (m *UserModel) Save() (*UserModel, error) {
-	db := DBPool[m.Datasource]["w"]
 	// Update
 	if m.ID > 0 {
+		// todo
+		// db := DBPool[m.Datasource]["w"]
 		props := StructToMap(*m)
 		conds := map[string]interface{}{"id": m.ID}
 		uprops := make(map[string]interface{})
@@ -149,7 +150,23 @@ func (m *UserModel) Save() (*UserModel, error) {
 		return m, m.Update(uprops, conds)
 	// Create
 	} else {
-		sql := "INSERT INTO user(uid,name,created_at) VALUES(?,?,?)"
+		table := "user"
+		ds_fix := int64(0)
+
+		
+		// Gen UUID
+		m.Uid = GenUUID()
+		ds_fix = int64(m.Uid) / int64(GoShardingTableNumber) % int64(GoShardingDatasourceNumber)
+		table_fix := int64(m.Uid) % int64(GoShardingTableNumber)
+		table = fmt.Sprintf("user_%d", table_fix)
+
+		
+
+		sql := "INSERT INTO table(uid,name,created_at) VALUES(?,?,?)"
+		sql = strings.Replace(sql, "table", table, 1)
+
+		db := DBPool[fmt.Sprintf("ds_%d", ds_fix)]["w"]
+
 		if GoShardingSqlLog {
 			fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, m.Uid, m.Name, m.CreatedAt)
 		}
@@ -223,12 +240,12 @@ func (m *UserModel) Where(conds map[string]interface{}) ([]*UserModel, error) {
 
 func (m *UserModel) Create(props map[string]interface{}) (*UserModel, error) {
 	if m.AutoID != "" {
-		props[m.AutoID] = GenUUID()
+		props[Underscore(m.AutoID)] = GenUUID()
 	}
 	// todo 根据sharding_column选择datasource
 	db := DBPool[m.Datasource]["w"]
 	if m.AutoID != "" {
-		props[m.AutoID] = GenUUID()
+		props[Underscore(m.AutoID)] = GenUUID()
 	}
 	keys := make([]string, 0)
 	values := make([]interface{}, 0)
@@ -446,4 +463,4 @@ func (m *UserModel) Page(page int, size int) *UserModel {
 	return m
 }
 
-var User = UserModel{Datasource: "default", Table: "user", AutoID: "uid"}
+var User = UserModel{Datasource: "default", Table: "user", AutoID: "Uid"}

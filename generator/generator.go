@@ -9,6 +9,7 @@ import (
 	"strings"
 	"text/template"
 
+	. "github.com/hide2/go-sharding/db"
 	. "github.com/hide2/go-sharding/lib"
 
 	"gopkg.in/yaml.v2"
@@ -150,9 +151,10 @@ func (m *{{.Model}}Model) Find(id int64) (*{{.Model}}Model, error) {
 }
 
 func (m *{{.Model}}Model) Save() (*{{.Model}}Model, error) {
-	db := DBPool[m.Datasource]["w"]
 	// Update
 	if m.ID > 0 {
+		// todo
+		// db := DBPool[m.Datasource]["w"]
 		props := StructToMap(*m)
 		conds := map[string]interface{}{"id": m.ID}
 		uprops := make(map[string]interface{})
@@ -164,7 +166,29 @@ func (m *{{.Model}}Model) Save() (*{{.Model}}Model, error) {
 		return m, m.Update(uprops, conds)
 	// Create
 	} else {
+		table := "{{.Table}}"
+		ds_fix := int64(0)
+
+		{{if .AutoID}}
+		// Gen UUID
+		m.{{.AutoID}} = GenUUID()
+		ds_fix = int64(m.{{.AutoID}}) / int64(GoShardingTableNumber) % int64(GoShardingDatasourceNumber)
+		table_fix := int64(m.{{.AutoID}}) % int64(GoShardingTableNumber)
+		table = fmt.Sprintf("{{.Table}}_%d", table_fix)
+
+		{{else if .ShardingID}}
+
+		// ShardingColumn
+		ds_fix = int64(m.{{.ShardingID}}) / int64(GoShardingTableNumber) % int64(GoShardingDatasourceNumber)
+		table_fix := int64(m.{{.ShardingID}}) % int64(GoShardingTableNumber)
+		table = fmt.Sprintf("{{.Table}}_%d", table_fix)
+		{{end}}
+
 		sql := "{{.InsertSQL}}"
+		sql = strings.Replace(sql, "table", table, 1)
+
+		db := DBPool[fmt.Sprintf("ds_%d", ds_fix)]["w"]
+
 		if GoShardingSqlLog {
 			fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, {{.InsertArgs}})
 		}
@@ -238,12 +262,12 @@ func (m *{{.Model}}Model) Where(conds map[string]interface{}) ([]*{{.Model}}Mode
 
 func (m *{{.Model}}Model) Create(props map[string]interface{}) (*{{.Model}}Model, error) {
 	if m.AutoID != "" {
-		props[m.AutoID] = GenUUID()
+		props[Underscore(m.AutoID)] = GenUUID()
 	}
 	// todo 根据sharding_column选择datasource
 	db := DBPool[m.Datasource]["w"]
 	if m.AutoID != "" {
-		props[m.AutoID] = GenUUID()
+		props[Underscore(m.AutoID)] = GenUUID()
 	}
 	keys := make([]string, 0)
 	values := make([]interface{}, 0)
@@ -478,6 +502,7 @@ type ModelAttr struct {
 	InsertArgs string
 	ScanStr    string
 	AutoID     string
+	ShardingID string
 }
 
 func Gen() {
@@ -501,10 +526,14 @@ func Gen() {
 		columns := make([]string, 0)
 		imports = append(imports, "fmt")
 		autoid := ""
+		shardingid := ""
 		for _, v := range j {
 			if v.Key != "model" {
 				attrs = append(attrs, Camelize(v.Key.(string)))
 				keys = append(keys, v.Key.(string))
+				if v.Key.(string) == GoShardingColumn {
+					shardingid = Camelize(v.Key.(string))
+				}
 				c := v.Value.(string)
 				if c == "int64|auto" {
 					values = append(values, "int64")
@@ -517,7 +546,7 @@ func Gen() {
 					c = "BIGINT"
 				} else if c == "int64|auto" {
 					c = "BIGINT"
-					autoid = v.Key.(string)
+					autoid = Camelize(v.Key.(string))
 				} else if c == "time.Time" {
 					c = "DATETIME"
 					// imports = append(imports, "time")
@@ -548,8 +577,8 @@ func Gen() {
 		ph := strings.Join(phs, ",")
 		iarg := strings.Join(iargs, ", ")
 		scanstr := strings.Join(scans, ", ")
-		isql := fmt.Sprintf("INSERT INTO %s(%s) VALUES(%s)", table, cstr, ph)
-		m := ModelAttr{modelname, table, imports, attrs, keys, values, columns, isql, iarg, scanstr, autoid}
+		isql := fmt.Sprintf("INSERT INTO table(%s) VALUES(%s)", cstr, ph)
+		m := ModelAttr{modelname, table, imports, attrs, keys, values, columns, isql, iarg, scanstr, autoid, shardingid}
 		var b bytes.Buffer
 		t.Execute(&b, m)
 		// fmt.Println(b.String())
