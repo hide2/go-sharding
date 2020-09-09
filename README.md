@@ -50,12 +50,12 @@ datasources:
     read: root:root@tcp(127.0.0.1:3306)/my_db_3?charset=utf8mb4&parseTime=True
 
   - name: ds_4
-    write: root:root@tcp(127.0.0.1:3306)/my_db_2?charset=utf8mb4&parseTime=True
-    read: root:root@tcp(127.0.0.1:3306)/my_db_2?charset=utf8mb4&parseTime=True
+    write: root:root@tcp(127.0.0.1:3306)/my_db_4?charset=utf8mb4&parseTime=True
+    read: root:root@tcp(127.0.0.1:3306)/my_db_4?charset=utf8mb4&parseTime=True
 
   - name: ds_5
-    write: root:root@tcp(127.0.0.1:3306)/my_db_3?charset=utf8mb4&parseTime=True
-    read: root:root@tcp(127.0.0.1:3306)/my_db_3?charset=utf8mb4&parseTime=True
+    write: root:root@tcp(127.0.0.1:3306)/my_db_5?charset=utf8mb4&parseTime=True
+    read: root:root@tcp(127.0.0.1:3306)/my_db_5?charset=utf8mb4&parseTime=True
 
     sql_log: false
 slow_sql_log: 500
