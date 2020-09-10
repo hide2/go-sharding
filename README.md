@@ -105,7 +105,7 @@ func main() {
 		User.Exec(sql)
 	}
 	// Create Sharding tables
-	fmt.Sprintf("[CreateTable]")
+	fmt.Println("[CreateTable]")
 	User.CreateTable()
 
 	// C
@@ -120,9 +120,8 @@ func main() {
 	}
 
 	// R
-	u, e := User.FindByUid(uid)
-	fmt.Println("[FindByUid] DS=ds_%d Table=user_%d", int64(u.Uid)/int64(GoShardingTableNumber)%int64(GoShardingDatasourceNumber), e)
-	fmt.Println("[FindByUid]", u, e)
+	u, _ := User.FindByUid(uid)
+	fmt.Println("[FindByUid]", u.ID, u.Uid, u.Datasource, u.Table)
 }
 
 ```
