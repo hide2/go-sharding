@@ -240,15 +240,26 @@ func (m *EventModel) Save() (*EventModel, error) {
 }
 
 func (m *EventModel) Where(conds map[string]interface{}) ([]*EventModel, error) {
-	// todo
-	db := DBPool[m.Datasource]["r"]
+	var ds, table string
+	if sid, ok := conds[GoShardingColumn]; ok {
+		ds_fix := sid.(int64)  / int64(GoShardingTableNumber) % int64(GoShardingDatasourceNumber)
+		table_fix := sid.(int64) % int64(GoShardingTableNumber)
+		ds = fmt.Sprintf("ds_%d", ds_fix)
+		table = fmt.Sprintf("event_%d", table_fix)
+	} else {
+		return nil, errors.New("Error Where, no Sharding Column")
+	}
+	m.Datasource = ds
+	m.Table = table
+	db := DBPool[ds]["r"]
+
 	wherestr := make([]string, 0)
 	cvs := make([]interface{}, 0)
 	for k, v := range conds {
 		wherestr = append(wherestr, k + "=?")
 		cvs = append(cvs, v)
 	}
-	sql := fmt.Sprintf("SELECT * FROM event WHERE %s", strings.Join(wherestr, " AND "))
+	sql := fmt.Sprintf("SELECT * FROM %s WHERE %s", table, strings.Join(wherestr, " AND "))
 	if m.OdB != "" {
 		sql = sql + " ORDER BY " + m.OdB
 	}
@@ -279,6 +290,8 @@ func (m *EventModel) Where(conds map[string]interface{}) ([]*EventModel, error) 
 		if err != nil {
 			return nil, err
 		}
+		m.Datasource = ds
+		m.Table = table
 		ms = append(ms, m)
 	}
 	e := time.Now().UnixNano()/1e6 - st

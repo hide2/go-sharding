@@ -184,6 +184,23 @@ func main() {
 		e, _ := Event.Create(props)
 		fmt.Println("[Create Event]", e.ID, e.Uid, e.Event, e.Datasource, e.Table)
 	}
+
+	// WHERE
+	conds := map[string]interface{}{"uid": uid3}
+	es, _ := Event.Where(conds)
+	for _, v := range es {
+		fmt.Println("[Where]", v.ID, v.Uid, v.Event, v.Datasource, v.Table)
+	}
+
+	// UPDATE
+	props2 := map[string]interface{}{"event": "item"}
+	conds2 := map[string]interface{}{"uid": uid3}
+	Event.Update(props2, conds2)
+	es2, _ := Event.Where(conds)
+	fmt.Println("[Update]", len(es2))
+	for _, v := range es2 {
+		fmt.Println("[Update]", v.ID, v.Uid, v.Event, v.Datasource, v.Table)
+	}
 }
 
 ```
