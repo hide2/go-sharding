@@ -94,8 +94,9 @@ import (
 
 func main() {
 	// Gen UUID
-	for i := 0; i < 20; i++ {
-		fmt.Println("=", GenUUID())
+	for i := 0; i < 10; i++ {
+		uid := GenUUID()
+		fmt.Println("= Gen", uid)
 	}
 	// Drop Sharding tables
 	for t := 0; t < GoShardingTableNumber; t++ {
@@ -103,6 +104,17 @@ func main() {
 	}
 	// Create Sharding tables
 	User.CreateTable()
+
+	// C
+	for i := 0; i < 100; i++ {
+		u := User.New()
+		u.Name = "John"
+		u.CreatedAt = time.Now()
+		u.Save()
+		ds_fix := int64(u.Uid) / int64(GoShardingTableNumber) % int64(GoShardingDatasourceNumber)
+		table_fix := int64(u.Uid) % int64(GoShardingTableNumber)
+		fmt.Println("[Save]", u.ID, u.Uid, ds_fix, table_fix)
+	}
 }
 
 ```
