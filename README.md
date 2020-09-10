@@ -120,8 +120,18 @@ func main() {
 	}
 
 	// R
-	u, _ := User.FindByUid(uid)
-	fmt.Println("[FindByUid]", u.ID, u.Uid, u.Datasource, u.Table)
+	u, e := User.FindByUid(123)
+	fmt.Println("[FindByUid(123)]", u, e)
+	u, _ = User.FindByUid(uid)
+	fmt.Println("[FindByUid]", u.ID, u.Uid, u.Name, u.Datasource, u.Table)
+
+	// U
+	u.Name = "Calvin"
+	u.Save()
+	fmt.Println("[Update]", u.ID, u.Uid, u.Name, u.Datasource, u.Table)
+
+	u, _ = User.FindByUid(uid)
+	fmt.Println("[FindByUid]", u.ID, u.Uid, u.Name, u.Datasource, u.Table)
 }
 
 ```

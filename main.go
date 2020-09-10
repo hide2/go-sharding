@@ -14,15 +14,15 @@ func main() {
 		uid := GenUUID()
 		fmt.Println("[GenUUID]", uid)
 	}
-	// Drop Sharding tables
-	for t := 0; t < GoShardingTableNumber; t++ {
-		sql := fmt.Sprintf("DROP TABLE IF EXISTS user_%d", t)
-		fmt.Println("[Exec]", sql)
-		User.Exec(sql)
-	}
-	// Create Sharding tables
-	fmt.Println("[CreateTable]")
-	User.CreateTable()
+	// // Drop Sharding tables
+	// for t := 0; t < GoShardingTableNumber; t++ {
+	// 	sql := fmt.Sprintf("DROP TABLE IF EXISTS user_%d", t)
+	// 	fmt.Println("[Exec]", sql)
+	// 	User.Exec(sql)
+	// }
+	// // Create Sharding tables
+	// fmt.Println("[CreateTable]")
+	// User.CreateTable()
 
 	// C
 	var uid int64
@@ -36,6 +36,16 @@ func main() {
 	}
 
 	// R
-	u, _ := User.FindByUid(uid)
-	fmt.Println("[FindByUid]", u.ID, u.Uid, u.Datasource, u.Table)
+	u, e := User.FindByUid(123)
+	fmt.Println("[FindByUid(123)]", u, e)
+	u, _ = User.FindByUid(uid)
+	fmt.Println("[FindByUid]", u.ID, u.Uid, u.Name, u.Datasource, u.Table)
+
+	// U
+	u.Name = "Calvin"
+	u.Save()
+	fmt.Println("[Update]", u.ID, u.Uid, u.Name, u.Datasource, u.Table)
+
+	u, _ = User.FindByUid(uid)
+	fmt.Println("[FindByUid]", u.ID, u.Uid, u.Name, u.Datasource, u.Table)
 }

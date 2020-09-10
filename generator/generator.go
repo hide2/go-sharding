@@ -23,6 +23,7 @@ import (
 	. "github.com/hide2/go-sharding/db"
 	. "github.com/hide2/go-sharding/lib"
 	"strings"
+	"errors"
 	"time"
 {{ range $i, $m := .Imports }}
 	"{{$m}}"
@@ -164,13 +165,11 @@ func (m *{{.Model}}Model) FindBy{{.ShardingID}}(sid int64) (*{{.Model}}Model, er
 func (m *{{.Model}}Model) Save() (*{{.Model}}Model, error) {
 	// Update
 	if m.ID > 0 {
-		// todo
-		// db := DBPool[m.Datasource]["w"]
 		props := StructToMap(*m)
-		conds := map[string]interface{}{"id": m.ID}
+		conds := map[string]interface{}{"id": m.ID, Underscore("{{.ShardingID}}"): m.{{.ShardingID}}}
 		uprops := make(map[string]interface{})
 		for k, v := range props {
-			if k != "OdB" && k != "Lmt" && k != "Ofs" && k != "Datasource" && k != "Table" && k != "Trx" && k != "ID" {
+			if k != "OdB" && k != "Lmt" && k != "Ofs" && k != "Datasource" && k != "Table" && k != "Trx" && k != "ID" && k != "AutoID" && k != "{{.ShardingID}}" {
 				uprops[Underscore(k)] = v
 			}
 		}
@@ -360,11 +359,19 @@ func (m *{{.Model}}Model) Destroy(id int64) error {
 }
 
 func (m *{{.Model}}Model) Update(props map[string]interface{}, conds map[string]interface{}) error {
-	if _, ok := conds[GoShardingColumn]; ok {
-		// todo 根据sharding_column选择datasource
-		// db := DBPool[m.Datasource]["w"]
+	var ds, table string
+	if s, ok := conds[GoShardingColumn]; ok {
+		ds_fix := s.(int64)  / int64(GoShardingTableNumber) % int64(GoShardingDatasourceNumber)
+		table_fix := s.(int64) % int64(GoShardingTableNumber)
+		ds = fmt.Sprintf("ds_%d", ds_fix)
+		table = fmt.Sprintf("{{.Table}}_%d", table_fix)
+	} else {
+		fmt.Println("Error Update, no Sharding Column", conds)
+		return errors.New("Error Update, no Sharding Column")
 	}
-	db := DBPool[m.Datasource]["w"]
+	m.Datasource = ds
+	m.Table = table
+	db := DBPool[ds]["w"]
 	setstr := make([]string, 0)
 	wherestr := make([]string, 0)
 	cvs := make([]interface{}, 0)
@@ -376,7 +383,7 @@ func (m *{{.Model}}Model) Update(props map[string]interface{}, conds map[string]
 		wherestr = append(wherestr, k + "=?")
 		cvs = append(cvs, v)
 	}
-	sql := fmt.Sprintf("UPDATE {{.Table}} SET %s WHERE %s", strings.Join(setstr, ", "), strings.Join(wherestr, " AND "))
+	sql := fmt.Sprintf("UPDATE %s SET %s WHERE %s", table, strings.Join(setstr, ", "), strings.Join(wherestr, " AND "))
 	if GoShardingSqlLog {
 		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, cvs)
 	}
