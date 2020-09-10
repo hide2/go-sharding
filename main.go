@@ -25,14 +25,20 @@ func main() {
 	// User.CreateTable()
 
 	// C
-	var uid int64
+	var uid, uid2 int64
 	for i := 0; i < 10; i++ {
 		u := User.New()
 		u.Name = "John"
 		u.CreatedAt = time.Now()
 		u.Save()
 		fmt.Println("[Save]", u.ID, u.Uid, u.Datasource, u.Table)
-		uid = u.Uid
+
+		if i == 0 {
+			uid = u.Uid
+		}
+		if i == 1 {
+			uid2 = u.Uid
+		}
 	}
 
 	// R
@@ -48,4 +54,17 @@ func main() {
 
 	u, _ = User.FindByUid(uid)
 	fmt.Println("[FindByUid]", u.ID, u.Uid, u.Name, u.Datasource, u.Table)
+
+	// D
+	u, _ = User.FindByUid(uid)
+	fmt.Println("[Before Delete FindByUid]", u)
+	u.Delete()
+	u, _ = User.FindByUid(uid)
+	fmt.Println("[After Delete FindByUid]", u)
+
+	u, _ = User.FindByUid(uid2)
+	fmt.Println("[Before Destroy FindByUid]", u)
+	User.DestroyByUid(uid2)
+	u, _ = User.FindByUid(uid2)
+	fmt.Println("[After Destroy FindByUid]", u)
 }

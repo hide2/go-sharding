@@ -45,7 +45,10 @@ type {{.Model}}Model struct {
 {{- end }}
 }
 
-func (m *{{.Model}}Model) Begin(ds string) (*Tx, error) {
+func (m *{{.Model}}Model) Begin(ds string) error {
+	if ds == "" {
+		return errors.New("Error Begin, need ds string")
+	}
 	db := DBPool[ds]["w"]
 	sql := "BEGIN"
 	if GoShardingSqlLog {
@@ -53,7 +56,7 @@ func (m *{{.Model}}Model) Begin(ds string) (*Tx, error) {
 	}
 	tx, err := db.Begin()
 	m.Trx = tx
-	return tx, err
+	return err
 }
 
 func (m *{{.Model}}Model) Commit() error {
@@ -329,22 +332,30 @@ func (m *{{.Model}}Model) Create(props map[string]interface{}) (*{{.Model}}Model
 }
 
 func (m *{{.Model}}Model) Delete() error {
-	return m.Destroy(m.ID)
+	return m.DestroyBy{{.ShardingID}}(m.{{.ShardingID}})
 }
 
-func (m *{{.Model}}Model) Destroy(id int64) error {
-	// todo
-	db := DBPool[m.Datasource]["w"]
-	sql := "DELETE FROM {{.Table}} WHERE id = ?"
+func (m *{{.Model}}Model) DestroyBy{{.ShardingID}}(sid int64) error {
+	{{if .ShardingID}}
+	ds_fix := sid / int64(GoShardingTableNumber) % int64(GoShardingDatasourceNumber)
+	table_fix := sid % int64(GoShardingTableNumber)
+	ds := fmt.Sprintf("ds_%d", ds_fix)
+	table := fmt.Sprintf("{{.Table}}_%d", table_fix)
+	m.Datasource = ds
+	m.Table = table
+	sharding_column := Underscore("{{.ShardingID}}")
+
+	db := DBPool[ds]["w"]
+	sql := fmt.Sprintf("DELETE FROM %s WHERE %s = ?", table, sharding_column)
 	if GoShardingSqlLog {
-		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, id)
+		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, sid)
 	}
 	st := time.Now().UnixNano() / 1e6
 	var err error
 	if m.Trx != nil {
-		_, err = m.Trx.Exec(sql, id)
+		_, err = m.Trx.Exec(sql, sid)
 	} else {
-		_, err = db.Exec(sql, id)
+		_, err = db.Exec(sql, sid)
 	}
 	if err != nil {
 		fmt.Printf("Delete data failed, err:%v\n", err)
@@ -356,6 +367,9 @@ func (m *{{.Model}}Model) Destroy(id int64) error {
 		fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
 	}
 	return nil
+	{{else}}
+	return errors.New("Error Destroy, no Sharding Column")
+	{{end}}
 }
 
 func (m *{{.Model}}Model) Update(props map[string]interface{}, conds map[string]interface{}) error {

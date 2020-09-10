@@ -1,4 +1,4 @@
-Go-Sharding is a simple Sharding middleware based on GO-ORM(https://github.com/hide2/go-orm)
+Go-Sharding is a simple Sharding middleware
 
 # Go-Sharding Features
 - Auto mapping SQL to Sharding databases & tables
@@ -132,6 +132,18 @@ func main() {
 
 	u, _ = User.FindByUid(uid)
 	fmt.Println("[FindByUid]", u.ID, u.Uid, u.Name, u.Datasource, u.Table)
-}
 
+	// D
+	u, _ = User.FindByUid(uid)
+	fmt.Println("[Before Delete FindByUid]", u)
+	u.Delete()
+	u, _ = User.FindByUid(uid)
+	fmt.Println("[After Delete FindByUid]", u)
+
+	u, _ = User.FindByUid(uid2)
+	fmt.Println("[Before Destroy FindByUid]", u)
+	User.DestroyByUid(uid2)
+	u, _ = User.FindByUid(uid2)
+	fmt.Println("[After Destroy FindByUid]", u)
+}
 ```
