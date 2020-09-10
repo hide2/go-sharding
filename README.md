@@ -57,8 +57,8 @@ datasources:
     write: root:root@tcp(127.0.0.1:3306)/my_db_5?charset=utf8mb4&parseTime=True
     read: root:root@tcp(127.0.0.1:3306)/my_db_5?charset=utf8mb4&parseTime=True
 
-    sql_log: false
-slow_sql_log: 500
+sql_log: false
+slow_sql_log: 500 (ms)
 
 sharding_table_number: 255
 sharding_column: uid
