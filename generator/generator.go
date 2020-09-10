@@ -165,6 +165,35 @@ func (m *{{.Model}}Model) FindBy{{.ShardingID}}(sid int64) (*{{.Model}}Model, er
 }
 {{end}}
 
+{{if .ShardingID}}
+func (m *{{.Model}}Model) FindBy{{.ShardingID}}AndID(sid int64, id int64) (*{{.Model}}Model, error) {
+	ds_fix := sid / int64(GoShardingTableNumber) % int64(GoShardingDatasourceNumber)
+	table_fix := sid % int64(GoShardingTableNumber)
+	ds := fmt.Sprintf("ds_%d", ds_fix)
+	table := fmt.Sprintf("{{.Table}}_%d", table_fix)
+	m.Datasource = ds
+	m.Table = table
+	sharding_column := Underscore("{{.ShardingID}}")
+
+	db := DBPool[ds]["r"]
+	sql := fmt.Sprintf("SELECT * FROM %s WHERE %s = ? and id = ?", table, sharding_column)
+
+	if GoShardingSqlLog {
+		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, sid, id)
+	}
+	st := time.Now().UnixNano() / 1e6
+	row := db.QueryRow(sql, sid, id)
+	if err := row.Scan({{.ScanStr}}); err != nil {
+		return nil, err
+	}
+	e := time.Now().UnixNano()/1e6 - st
+	if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
+		fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
+	}
+	return m, nil
+}
+{{end}}
+
 func (m *{{.Model}}Model) Save() (*{{.Model}}Model, error) {
 	// Update
 	if m.ID > 0 {
@@ -179,14 +208,15 @@ func (m *{{.Model}}Model) Save() (*{{.Model}}Model, error) {
 		return m, m.Update(uprops, conds)
 	// Create
 	} else {
-		table := "{{.Table}}"
 		ds_fix := int64(0)
+		table := "{{.Table}}"
 
 		{{if .AutoID}}
 		// Gen UUID
-		m.{{.AutoID}} = GenUUID()
-		ds_fix = int64(m.{{.AutoID}}) / int64(GoShardingTableNumber) % int64(GoShardingDatasourceNumber)
-		table_fix := int64(m.{{.AutoID}}) % int64(GoShardingTableNumber)
+		sid := GenUUID()
+		m.{{.AutoID}} = sid
+		ds_fix = sid / int64(GoShardingTableNumber) % int64(GoShardingDatasourceNumber)
+		table_fix := sid % int64(GoShardingTableNumber)
 		ds := fmt.Sprintf("ds_%d", ds_fix)
 		table = fmt.Sprintf("{{.Table}}_%d", table_fix)
 		m.Datasource = ds
@@ -195,12 +225,19 @@ func (m *{{.Model}}Model) Save() (*{{.Model}}Model, error) {
 		{{else if .ShardingID}}
 
 		// ShardingColumn
-		ds_fix = int64(m.{{.ShardingID}}) / int64(GoShardingTableNumber) % int64(GoShardingDatasourceNumber)
-		table_fix := int64(m.{{.ShardingID}}) % int64(GoShardingTableNumber)
+		sid := m.{{.ShardingID}}
+		if sid <= 0 {
+			return nil, errors.New("Error Save, no Sharding Column")
+		}
+		ds_fix = sid / int64(GoShardingTableNumber) % int64(GoShardingDatasourceNumber)
+		table_fix := sid % int64(GoShardingTableNumber)
 		ds := fmt.Sprintf("ds_%d", ds_fix)
 		table = fmt.Sprintf("{{.Table}}_%d", table_fix)
 		m.Datasource = ds
 		m.Table = table
+
+		{{else}}
+		return nil, errors.New("Error Save, no Sharding Column")
 		{{end}}
 
 		sql := "{{.InsertSQL}}"
@@ -281,14 +318,42 @@ func (m *{{.Model}}Model) Where(conds map[string]interface{}) ([]*{{.Model}}Mode
 }
 
 func (m *{{.Model}}Model) Create(props map[string]interface{}) (*{{.Model}}Model, error) {
-	if m.AutoID != "" {
-		props[Underscore(m.AutoID)] = GenUUID()
+	ds_fix := int64(0)
+	table := "{{.Table}}"
+
+	{{if .AutoID}}
+	// Gen UUID
+	sid :=  GenUUID()
+	props[Underscore(m.AutoID)] = sid
+	m.{{.AutoID}} = sid
+	ds_fix = sid / int64(GoShardingTableNumber) % int64(GoShardingDatasourceNumber)
+	table_fix := sid % int64(GoShardingTableNumber)
+	ds := fmt.Sprintf("ds_%d", ds_fix)
+	table = fmt.Sprintf("{{.Table}}_%d", table_fix)
+	m.Datasource = ds
+	m.Table = table
+
+	{{else if .ShardingID}}
+
+	// ShardingColumn
+	sid := props[GoShardingColumn].(int64)
+	if sid <= 0 {
+		return nil, errors.New("Error Create, no Sharding Column")
 	}
-	// todo 根据sharding_column选择datasource
-	db := DBPool[m.Datasource]["w"]
-	if m.AutoID != "" {
-		props[Underscore(m.AutoID)] = GenUUID()
-	}
+	m.{{.ShardingID}} = sid
+	ds_fix = sid / int64(GoShardingTableNumber) % int64(GoShardingDatasourceNumber)
+	table_fix := sid % int64(GoShardingTableNumber)
+	ds := fmt.Sprintf("ds_%d", ds_fix)
+	table = fmt.Sprintf("{{.Table}}_%d", table_fix)
+	m.Datasource = ds
+	m.Table = table
+
+	{{else}}
+	return nil, errors.New("Error Create, no Sharding Column")
+	{{end}}
+
+	db := DBPool[ds]["w"]
+
 	keys := make([]string, 0)
 	values := make([]interface{}, 0)
 	for k, v := range props {
@@ -301,7 +366,7 @@ func (m *{{.Model}}Model) Create(props map[string]interface{}) (*{{.Model}}Model
 		phs = append(phs, "?")
 	}
 	ph := strings.Join(phs, ",")
-	sql := fmt.Sprintf("INSERT INTO {{.Table}}(%s) VALUES(%s)", cstr, ph)
+	sql := fmt.Sprintf("INSERT INTO %s(%s) VALUES(%s)", table, cstr, ph)
 
 	if GoShardingSqlLog {
 		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, values)
@@ -323,12 +388,12 @@ func (m *{{.Model}}Model) Create(props map[string]interface{}) (*{{.Model}}Model
 		fmt.Printf("Get insert id failed, err:%v\n", err)
 		return nil, err
 	}
-	m.ID = lastInsertID
 	e := time.Now().UnixNano()/1e6 - st
 	if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
 		fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
 	}
-	return m, nil
+	
+	return m.FindBy{{.ShardingID}}AndID(sid, lastInsertID)
 }
 
 func (m *{{.Model}}Model) Delete() error {
@@ -374,13 +439,12 @@ func (m *{{.Model}}Model) DestroyBy{{.ShardingID}}(sid int64) error {
 
 func (m *{{.Model}}Model) Update(props map[string]interface{}, conds map[string]interface{}) error {
 	var ds, table string
-	if s, ok := conds[GoShardingColumn]; ok {
-		ds_fix := s.(int64)  / int64(GoShardingTableNumber) % int64(GoShardingDatasourceNumber)
-		table_fix := s.(int64) % int64(GoShardingTableNumber)
+	if sid, ok := conds[GoShardingColumn]; ok {
+		ds_fix := sid.(int64)  / int64(GoShardingTableNumber) % int64(GoShardingDatasourceNumber)
+		table_fix := sid.(int64) % int64(GoShardingTableNumber)
 		ds = fmt.Sprintf("ds_%d", ds_fix)
 		table = fmt.Sprintf("{{.Table}}_%d", table_fix)
 	} else {
-		fmt.Println("Error Update, no Sharding Column", conds)
 		return errors.New("Error Update, no Sharding Column")
 	}
 	m.Datasource = ds

@@ -149,6 +149,35 @@ func (m *EventModel) FindByUid(sid int64) (*EventModel, error) {
 }
 
 
+
+func (m *EventModel) FindByUidAndID(sid int64, id int64) (*EventModel, error) {
+	ds_fix := sid / int64(GoShardingTableNumber) % int64(GoShardingDatasourceNumber)
+	table_fix := sid % int64(GoShardingTableNumber)
+	ds := fmt.Sprintf("ds_%d", ds_fix)
+	table := fmt.Sprintf("event_%d", table_fix)
+	m.Datasource = ds
+	m.Table = table
+	sharding_column := Underscore("Uid")
+
+	db := DBPool[ds]["r"]
+	sql := fmt.Sprintf("SELECT * FROM %s WHERE %s = ? and id = ?", table, sharding_column)
+
+	if GoShardingSqlLog {
+		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, sid, id)
+	}
+	st := time.Now().UnixNano() / 1e6
+	row := db.QueryRow(sql, sid, id)
+	if err := row.Scan(&m.ID, &m.Uid, &m.Event, &m.CreatedAt); err != nil {
+		return nil, err
+	}
+	e := time.Now().UnixNano()/1e6 - st
+	if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
+		fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
+	}
+	return m, nil
+}
+
+
 func (m *EventModel) Save() (*EventModel, error) {
 	// Update
 	if m.ID > 0 {
@@ -163,18 +192,23 @@ func (m *EventModel) Save() (*EventModel, error) {
 		return m, m.Update(uprops, conds)
 	// Create
 	} else {
-		table := "event"
 		ds_fix := int64(0)
+		table := "event"
 
 		
 
 		// ShardingColumn
-		ds_fix = int64(m.Uid) / int64(GoShardingTableNumber) % int64(GoShardingDatasourceNumber)
-		table_fix := int64(m.Uid) % int64(GoShardingTableNumber)
+		sid := m.Uid
+		if sid <= 0 {
+			return nil, errors.New("Error Save, no Sharding Column")
+		}
+		ds_fix = sid / int64(GoShardingTableNumber) % int64(GoShardingDatasourceNumber)
+		table_fix := sid % int64(GoShardingTableNumber)
 		ds := fmt.Sprintf("ds_%d", ds_fix)
 		table = fmt.Sprintf("event_%d", table_fix)
 		m.Datasource = ds
 		m.Table = table
+
 		
 
 		sql := "INSERT INTO table(uid,event,created_at) VALUES(?,?,?)"
@@ -255,14 +289,28 @@ func (m *EventModel) Where(conds map[string]interface{}) ([]*EventModel, error) 
 }
 
 func (m *EventModel) Create(props map[string]interface{}) (*EventModel, error) {
-	if m.AutoID != "" {
-		props[Underscore(m.AutoID)] = GenUUID()
+	ds_fix := int64(0)
+	table := "event"
+
+	
+
+	// ShardingColumn
+	sid := props[GoShardingColumn].(int64)
+	if sid <= 0 {
+		return nil, errors.New("Error Create, no Sharding Column")
 	}
-	// todo 根据sharding_column选择datasource
-	db := DBPool[m.Datasource]["w"]
-	if m.AutoID != "" {
-		props[Underscore(m.AutoID)] = GenUUID()
-	}
+	m.Uid = sid
+	ds_fix = sid / int64(GoShardingTableNumber) % int64(GoShardingDatasourceNumber)
+	table_fix := sid % int64(GoShardingTableNumber)
+	ds := fmt.Sprintf("ds_%d", ds_fix)
+	table = fmt.Sprintf("event_%d", table_fix)
+	m.Datasource = ds
+	m.Table = table
+
+	
+
+	db := DBPool[ds]["w"]
+
 	keys := make([]string, 0)
 	values := make([]interface{}, 0)
 	for k, v := range props {
@@ -275,7 +323,7 @@ func (m *EventModel) Create(props map[string]interface{}) (*EventModel, error) {
 		phs = append(phs, "?")
 	}
 	ph := strings.Join(phs, ",")
-	sql := fmt.Sprintf("INSERT INTO event(%s) VALUES(%s)", cstr, ph)
+	sql := fmt.Sprintf("INSERT INTO %s(%s) VALUES(%s)", table, cstr, ph)
 
 	if GoShardingSqlLog {
 		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, values)
@@ -297,12 +345,12 @@ func (m *EventModel) Create(props map[string]interface{}) (*EventModel, error) {
 		fmt.Printf("Get insert id failed, err:%v\n", err)
 		return nil, err
 	}
-	m.ID = lastInsertID
 	e := time.Now().UnixNano()/1e6 - st
 	if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
 		fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
 	}
-	return m, nil
+	
+	return m.FindByUidAndID(sid, lastInsertID)
 }
 
 func (m *EventModel) Delete() error {
@@ -346,13 +394,12 @@ func (m *EventModel) DestroyByUid(sid int64) error {
 
 func (m *EventModel) Update(props map[string]interface{}, conds map[string]interface{}) error {
 	var ds, table string
-	if s, ok := conds[GoShardingColumn]; ok {
-		ds_fix := s.(int64)  / int64(GoShardingTableNumber) % int64(GoShardingDatasourceNumber)
-		table_fix := s.(int64) % int64(GoShardingTableNumber)
+	if sid, ok := conds[GoShardingColumn]; ok {
+		ds_fix := sid.(int64)  / int64(GoShardingTableNumber) % int64(GoShardingDatasourceNumber)
+		table_fix := sid.(int64) % int64(GoShardingTableNumber)
 		ds = fmt.Sprintf("ds_%d", ds_fix)
 		table = fmt.Sprintf("event_%d", table_fix)
 	} else {
-		fmt.Println("Error Update, no Sharding Column", conds)
 		return errors.New("Error Update, no Sharding Column")
 	}
 	m.Datasource = ds
