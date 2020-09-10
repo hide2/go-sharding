@@ -132,14 +132,24 @@ func (m *{{.Model}}Model) New() *{{.Model}}Model {
 	return &n
 }
 
-func (m *{{.Model}}Model) Find(id int64) (*{{.Model}}Model, error) {
-	db := DBPool[m.Datasource]["r"]
-	sql := "SELECT * FROM {{.Table}} WHERE id = ?"
+{{if .ShardingID}}
+func (m *{{.Model}}Model) FindBy{{.ShardingID}}(sid int64) (*{{.Model}}Model, error) {
+	ds_fix := sid / int64(GoShardingTableNumber) % int64(GoShardingDatasourceNumber)
+	table_fix := sid % int64(GoShardingTableNumber)
+	ds := fmt.Sprintf("ds_%d", ds_fix)
+	table := fmt.Sprintf("{{.Table}}_%d", table_fix)
+	m.Datasource = ds
+	m.Table = table
+	sharding_column := Underscore("{{.ShardingID}}")
+
+	db := DBPool[ds]["r"]
+	sql := fmt.Sprintf("SELECT * FROM %s WHERE %s = ?", table, sharding_column)
+
 	if GoShardingSqlLog {
-		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, id)
+		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, sid)
 	}
 	st := time.Now().UnixNano() / 1e6
-	row := db.QueryRow(sql, id)
+	row := db.QueryRow(sql, sid)
 	if err := row.Scan({{.ScanStr}}); err != nil {
 		return nil, err
 	}
@@ -149,6 +159,7 @@ func (m *{{.Model}}Model) Find(id int64) (*{{.Model}}Model, error) {
 	}
 	return m, nil
 }
+{{end}}
 
 func (m *{{.Model}}Model) Save() (*{{.Model}}Model, error) {
 	// Update
@@ -174,20 +185,26 @@ func (m *{{.Model}}Model) Save() (*{{.Model}}Model, error) {
 		m.{{.AutoID}} = GenUUID()
 		ds_fix = int64(m.{{.AutoID}}) / int64(GoShardingTableNumber) % int64(GoShardingDatasourceNumber)
 		table_fix := int64(m.{{.AutoID}}) % int64(GoShardingTableNumber)
+		ds := fmt.Sprintf("ds_%d", ds_fix)
 		table = fmt.Sprintf("{{.Table}}_%d", table_fix)
+		m.Datasource = ds
+		m.Table = table
 
 		{{else if .ShardingID}}
 
 		// ShardingColumn
 		ds_fix = int64(m.{{.ShardingID}}) / int64(GoShardingTableNumber) % int64(GoShardingDatasourceNumber)
 		table_fix := int64(m.{{.ShardingID}}) % int64(GoShardingTableNumber)
+		ds := fmt.Sprintf("ds_%d", ds_fix)
 		table = fmt.Sprintf("{{.Table}}_%d", table_fix)
+		m.Datasource = ds
+		m.Table = table
 		{{end}}
 
 		sql := "{{.InsertSQL}}"
 		sql = strings.Replace(sql, "table", table, 1)
 
-		db := DBPool[fmt.Sprintf("ds_%d", ds_fix)]["w"]
+		db := DBPool[ds]["w"]
 
 		if GoShardingSqlLog {
 			fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, {{.InsertArgs}})
@@ -213,6 +230,7 @@ func (m *{{.Model}}Model) Save() (*{{.Model}}Model, error) {
 }
 
 func (m *{{.Model}}Model) Where(conds map[string]interface{}) ([]*{{.Model}}Model, error) {
+	// todo
 	db := DBPool[m.Datasource]["r"]
 	wherestr := make([]string, 0)
 	cvs := make([]interface{}, 0)
@@ -303,11 +321,12 @@ func (m *{{.Model}}Model) Create(props map[string]interface{}) (*{{.Model}}Model
 		fmt.Printf("Get insert id failed, err:%v\n", err)
 		return nil, err
 	}
+	m.ID = lastInsertID
 	e := time.Now().UnixNano()/1e6 - st
 	if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
 		fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
 	}
-	return m.Find(lastInsertID)
+	return m, nil
 }
 
 func (m *{{.Model}}Model) Delete() error {
@@ -315,6 +334,7 @@ func (m *{{.Model}}Model) Delete() error {
 }
 
 func (m *{{.Model}}Model) Destroy(id int64) error {
+	// todo
 	db := DBPool[m.Datasource]["w"]
 	sql := "DELETE FROM {{.Table}} WHERE id = ?"
 	if GoShardingSqlLog {
@@ -379,6 +399,7 @@ func (m *{{.Model}}Model) Update(props map[string]interface{}, conds map[string]
 }
 
 func (m *{{.Model}}Model) CountAll() (int, error) {
+	// todo
 	db := DBPool[m.Datasource]["r"]
 	sql := "SELECT count(1) FROM {{.Table}}"
 	if GoShardingSqlLog {
@@ -398,6 +419,7 @@ func (m *{{.Model}}Model) CountAll() (int, error) {
 }
 
 func (m *{{.Model}}Model) Count(conds map[string]interface{}) (int, error) {
+	// todo
 	db := DBPool[m.Datasource]["r"]
 	wherestr := make([]string, 0)
 	cvs := make([]interface{}, 0)
@@ -423,6 +445,7 @@ func (m *{{.Model}}Model) Count(conds map[string]interface{}) (int, error) {
 }
 
 func (m *{{.Model}}Model) All() ([]*{{.Model}}Model, error) {
+	// todo
 	db := DBPool[m.Datasource]["r"]
 	sql := "SELECT * FROM {{.Table}}"
 	if m.OdB != "" {
@@ -462,27 +485,6 @@ func (m *{{.Model}}Model) All() ([]*{{.Model}}Model, error) {
 		fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
 	}
 	return ms, nil
-}
-
-func (m *{{.Model}}Model) OrderBy(o string) *{{.Model}}Model {
-	m.OdB = o
-	return m
-}
-
-func (m *{{.Model}}Model) Offset(o int) *{{.Model}}Model {
-	m.Ofs = o
-	return m
-}
-
-func (m *{{.Model}}Model) Limit(l int) *{{.Model}}Model {
-	m.Lmt = l
-	return m
-}
-
-func (m *{{.Model}}Model) Page(page int, size int) *{{.Model}}Model {
-	m.Ofs = (page - 1)*size
-	m.Lmt = size
-	return m
 }
 
 var {{.Model}} = {{.Model}}Model{Datasource: "default", Table: "{{.Table}}", AutoID: "{{.AutoID}}"}

@@ -116,14 +116,24 @@ func (m *UserModel) New() *UserModel {
 	return &n
 }
 
-func (m *UserModel) Find(id int64) (*UserModel, error) {
-	db := DBPool[m.Datasource]["r"]
-	sql := "SELECT * FROM user WHERE id = ?"
+
+func (m *UserModel) FindByUid(sid int64) (*UserModel, error) {
+	ds_fix := sid / int64(GoShardingTableNumber) % int64(GoShardingDatasourceNumber)
+	table_fix := sid % int64(GoShardingTableNumber)
+	ds := fmt.Sprintf("ds_%d", ds_fix)
+	table := fmt.Sprintf("user_%d", table_fix)
+	m.Datasource = ds
+	m.Table = table
+	sharding_column := Underscore("Uid")
+
+	db := DBPool[ds]["r"]
+	sql := fmt.Sprintf("SELECT * FROM %s WHERE %s = ?", table, sharding_column)
+
 	if GoShardingSqlLog {
-		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, id)
+		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, sid)
 	}
 	st := time.Now().UnixNano() / 1e6
-	row := db.QueryRow(sql, id)
+	row := db.QueryRow(sql, sid)
 	if err := row.Scan(&m.ID, &m.Uid, &m.Name, &m.CreatedAt); err != nil {
 		return nil, err
 	}
@@ -133,6 +143,7 @@ func (m *UserModel) Find(id int64) (*UserModel, error) {
 	}
 	return m, nil
 }
+
 
 func (m *UserModel) Save() (*UserModel, error) {
 	// Update
@@ -158,14 +169,17 @@ func (m *UserModel) Save() (*UserModel, error) {
 		m.Uid = GenUUID()
 		ds_fix = int64(m.Uid) / int64(GoShardingTableNumber) % int64(GoShardingDatasourceNumber)
 		table_fix := int64(m.Uid) % int64(GoShardingTableNumber)
+		ds := fmt.Sprintf("ds_%d", ds_fix)
 		table = fmt.Sprintf("user_%d", table_fix)
+		m.Datasource = ds
+		m.Table = table
 
 		
 
 		sql := "INSERT INTO table(uid,name,created_at) VALUES(?,?,?)"
 		sql = strings.Replace(sql, "table", table, 1)
 
-		db := DBPool[fmt.Sprintf("ds_%d", ds_fix)]["w"]
+		db := DBPool[ds]["w"]
 
 		if GoShardingSqlLog {
 			fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, m.Uid, m.Name, m.CreatedAt)
@@ -191,6 +205,7 @@ func (m *UserModel) Save() (*UserModel, error) {
 }
 
 func (m *UserModel) Where(conds map[string]interface{}) ([]*UserModel, error) {
+	// todo
 	db := DBPool[m.Datasource]["r"]
 	wherestr := make([]string, 0)
 	cvs := make([]interface{}, 0)
@@ -281,11 +296,12 @@ func (m *UserModel) Create(props map[string]interface{}) (*UserModel, error) {
 		fmt.Printf("Get insert id failed, err:%v\n", err)
 		return nil, err
 	}
+	m.ID = lastInsertID
 	e := time.Now().UnixNano()/1e6 - st
 	if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
 		fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
 	}
-	return m.Find(lastInsertID)
+	return m, nil
 }
 
 func (m *UserModel) Delete() error {
@@ -293,6 +309,7 @@ func (m *UserModel) Delete() error {
 }
 
 func (m *UserModel) Destroy(id int64) error {
+	// todo
 	db := DBPool[m.Datasource]["w"]
 	sql := "DELETE FROM user WHERE id = ?"
 	if GoShardingSqlLog {
@@ -357,6 +374,7 @@ func (m *UserModel) Update(props map[string]interface{}, conds map[string]interf
 }
 
 func (m *UserModel) CountAll() (int, error) {
+	// todo
 	db := DBPool[m.Datasource]["r"]
 	sql := "SELECT count(1) FROM user"
 	if GoShardingSqlLog {
@@ -376,6 +394,7 @@ func (m *UserModel) CountAll() (int, error) {
 }
 
 func (m *UserModel) Count(conds map[string]interface{}) (int, error) {
+	// todo
 	db := DBPool[m.Datasource]["r"]
 	wherestr := make([]string, 0)
 	cvs := make([]interface{}, 0)
@@ -401,6 +420,7 @@ func (m *UserModel) Count(conds map[string]interface{}) (int, error) {
 }
 
 func (m *UserModel) All() ([]*UserModel, error) {
+	// todo
 	db := DBPool[m.Datasource]["r"]
 	sql := "SELECT * FROM user"
 	if m.OdB != "" {
@@ -440,27 +460,6 @@ func (m *UserModel) All() ([]*UserModel, error) {
 		fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
 	}
 	return ms, nil
-}
-
-func (m *UserModel) OrderBy(o string) *UserModel {
-	m.OdB = o
-	return m
-}
-
-func (m *UserModel) Offset(o int) *UserModel {
-	m.Ofs = o
-	return m
-}
-
-func (m *UserModel) Limit(l int) *UserModel {
-	m.Lmt = l
-	return m
-}
-
-func (m *UserModel) Page(page int, size int) *UserModel {
-	m.Ofs = (page - 1)*size
-	m.Lmt = size
-	return m
 }
 
 var User = UserModel{Datasource: "default", Table: "user", AutoID: "Uid"}

@@ -116,14 +116,24 @@ func (m *EventModel) New() *EventModel {
 	return &n
 }
 
-func (m *EventModel) Find(id int64) (*EventModel, error) {
-	db := DBPool[m.Datasource]["r"]
-	sql := "SELECT * FROM event WHERE id = ?"
+
+func (m *EventModel) FindByUid(sid int64) (*EventModel, error) {
+	ds_fix := sid / int64(GoShardingTableNumber) % int64(GoShardingDatasourceNumber)
+	table_fix := sid % int64(GoShardingTableNumber)
+	ds := fmt.Sprintf("ds_%d", ds_fix)
+	table := fmt.Sprintf("event_%d", table_fix)
+	m.Datasource = ds
+	m.Table = table
+	sharding_column := Underscore("Uid")
+
+	db := DBPool[ds]["r"]
+	sql := fmt.Sprintf("SELECT * FROM %s WHERE %s = ?", table, sharding_column)
+
 	if GoShardingSqlLog {
-		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, id)
+		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, sid)
 	}
 	st := time.Now().UnixNano() / 1e6
-	row := db.QueryRow(sql, id)
+	row := db.QueryRow(sql, sid)
 	if err := row.Scan(&m.ID, &m.Uid, &m.Event, &m.CreatedAt); err != nil {
 		return nil, err
 	}
@@ -133,6 +143,7 @@ func (m *EventModel) Find(id int64) (*EventModel, error) {
 	}
 	return m, nil
 }
+
 
 func (m *EventModel) Save() (*EventModel, error) {
 	// Update
@@ -158,13 +169,16 @@ func (m *EventModel) Save() (*EventModel, error) {
 		// ShardingColumn
 		ds_fix = int64(m.Uid) / int64(GoShardingTableNumber) % int64(GoShardingDatasourceNumber)
 		table_fix := int64(m.Uid) % int64(GoShardingTableNumber)
+		ds := fmt.Sprintf("ds_%d", ds_fix)
 		table = fmt.Sprintf("event_%d", table_fix)
+		m.Datasource = ds
+		m.Table = table
 		
 
 		sql := "INSERT INTO table(uid,event,created_at) VALUES(?,?,?)"
 		sql = strings.Replace(sql, "table", table, 1)
 
-		db := DBPool[fmt.Sprintf("ds_%d", ds_fix)]["w"]
+		db := DBPool[ds]["w"]
 
 		if GoShardingSqlLog {
 			fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, m.Uid, m.Event, m.CreatedAt)
@@ -190,6 +204,7 @@ func (m *EventModel) Save() (*EventModel, error) {
 }
 
 func (m *EventModel) Where(conds map[string]interface{}) ([]*EventModel, error) {
+	// todo
 	db := DBPool[m.Datasource]["r"]
 	wherestr := make([]string, 0)
 	cvs := make([]interface{}, 0)
@@ -280,11 +295,12 @@ func (m *EventModel) Create(props map[string]interface{}) (*EventModel, error) {
 		fmt.Printf("Get insert id failed, err:%v\n", err)
 		return nil, err
 	}
+	m.ID = lastInsertID
 	e := time.Now().UnixNano()/1e6 - st
 	if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
 		fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
 	}
-	return m.Find(lastInsertID)
+	return m, nil
 }
 
 func (m *EventModel) Delete() error {
@@ -292,6 +308,7 @@ func (m *EventModel) Delete() error {
 }
 
 func (m *EventModel) Destroy(id int64) error {
+	// todo
 	db := DBPool[m.Datasource]["w"]
 	sql := "DELETE FROM event WHERE id = ?"
 	if GoShardingSqlLog {
@@ -356,6 +373,7 @@ func (m *EventModel) Update(props map[string]interface{}, conds map[string]inter
 }
 
 func (m *EventModel) CountAll() (int, error) {
+	// todo
 	db := DBPool[m.Datasource]["r"]
 	sql := "SELECT count(1) FROM event"
 	if GoShardingSqlLog {
@@ -375,6 +393,7 @@ func (m *EventModel) CountAll() (int, error) {
 }
 
 func (m *EventModel) Count(conds map[string]interface{}) (int, error) {
+	// todo
 	db := DBPool[m.Datasource]["r"]
 	wherestr := make([]string, 0)
 	cvs := make([]interface{}, 0)
@@ -400,6 +419,7 @@ func (m *EventModel) Count(conds map[string]interface{}) (int, error) {
 }
 
 func (m *EventModel) All() ([]*EventModel, error) {
+	// todo
 	db := DBPool[m.Datasource]["r"]
 	sql := "SELECT * FROM event"
 	if m.OdB != "" {
@@ -439,27 +459,6 @@ func (m *EventModel) All() ([]*EventModel, error) {
 		fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
 	}
 	return ms, nil
-}
-
-func (m *EventModel) OrderBy(o string) *EventModel {
-	m.OdB = o
-	return m
-}
-
-func (m *EventModel) Offset(o int) *EventModel {
-	m.Ofs = o
-	return m
-}
-
-func (m *EventModel) Limit(l int) *EventModel {
-	m.Lmt = l
-	return m
-}
-
-func (m *EventModel) Page(page int, size int) *EventModel {
-	m.Ofs = (page - 1)*size
-	m.Lmt = size
-	return m
 }
 
 var Event = EventModel{Datasource: "default", Table: "event", AutoID: ""}
