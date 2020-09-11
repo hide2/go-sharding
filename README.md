@@ -1,4 +1,4 @@
-Go-Sharding is a simple Sharding middleware
+Go-Sharding is a simple Sharding middleware, auto-generate Model & Sharding CRUD methods based on model yml
 
 # Go-Sharding Features
 - Auto mapping SQL to Sharding databases & tables
