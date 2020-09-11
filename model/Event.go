@@ -246,59 +246,118 @@ func (m *EventModel) Where(conds map[string]interface{}) ([]*EventModel, error) 
 		table_fix := sid.(int64) % int64(GoShardingTableNumber)
 		ds = fmt.Sprintf("ds_%d", ds_fix)
 		table = fmt.Sprintf("event_%d", table_fix)
-	} else {
-		return nil, errors.New("Error Where, no Sharding Column")
-	}
-	m.Datasource = ds
-	m.Table = table
-	db := DBPool[ds]["r"]
-
-	wherestr := make([]string, 0)
-	cvs := make([]interface{}, 0)
-	for k, v := range conds {
-		wherestr = append(wherestr, k + "=?")
-		cvs = append(cvs, v)
-	}
-	sql := fmt.Sprintf("SELECT * FROM %s WHERE %s", table, strings.Join(wherestr, " AND "))
-	if m.OdB != "" {
-		sql = sql + " ORDER BY " + m.OdB
-	}
-	if m.Lmt > 0 {
-		sql = sql + fmt.Sprintf(" LIMIT %d", m.Lmt)
-	}
-	if m.Ofs > 0 {
-		sql = sql + fmt.Sprintf(" OFFSET %d", m.Ofs)
-	}
-	if GoShardingSqlLog {
-		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, cvs)
-	}
-	st := time.Now().UnixNano() / 1e6
-	rows, err := db.Query(sql, cvs...)
-	defer func() {
-		if rows != nil {
-			rows.Close() //关闭掉未scan的sql连接
-		}
-	}()
-	if err != nil {
-		fmt.Printf("Query data failed, err:%v\n", err)
-		return nil, err
-	}
-	ms := make([]*EventModel, 0)
-	for rows.Next() {
-		m = new(EventModel)
-		err = rows.Scan(&m.ID, &m.Uid, &m.Event, &m.CreatedAt) //不scan会导致连接不释放
-		if err != nil {
-			return nil, err
-		}
+	
 		m.Datasource = ds
 		m.Table = table
-		ms = append(ms, m)
+		db := DBPool[ds]["r"]
+
+		wherestr := make([]string, 0)
+		cvs := make([]interface{}, 0)
+		for k, v := range conds {
+			wherestr = append(wherestr, k + "=?")
+			cvs = append(cvs, v)
+		}
+		sql := fmt.Sprintf("SELECT * FROM %s WHERE %s", table, strings.Join(wherestr, " AND "))
+		if m.OdB != "" {
+			sql = sql + " ORDER BY " + m.OdB
+		}
+		if m.Lmt > 0 {
+			sql = sql + fmt.Sprintf(" LIMIT %d", m.Lmt)
+		}
+		if m.Ofs > 0 {
+			sql = sql + fmt.Sprintf(" OFFSET %d", m.Ofs)
+		}
+		// Clear Limitation
+		m.OdB = ""
+		m.Lmt = 0
+		m.Ofs = 0
+		if GoShardingSqlLog {
+			fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, cvs)
+		}
+		st := time.Now().UnixNano() / 1e6
+		rows, err := db.Query(sql, cvs...)
+		defer func() {
+			if rows != nil {
+				rows.Close() //关闭掉未scan的sql连接
+			}
+		}()
+		if err != nil {
+			fmt.Printf("Query data failed, err:%v\n", err)
+			return nil, err
+		}
+		ms := make([]*EventModel, 0)
+		for rows.Next() {
+			m = new(EventModel)
+			err = rows.Scan(&m.ID, &m.Uid, &m.Event, &m.CreatedAt) //不scan会导致连接不释放
+			if err != nil {
+				return nil, err
+			}
+			m.Datasource = ds
+			m.Table = table
+			ms = append(ms, m)
+		}
+		e := time.Now().UnixNano()/1e6 - st
+		if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
+			fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
+		}
+		return ms, nil
+	} else {
+		// No Sharding Column,  Find Across All Databases & Tables
+		ms := make([]*EventModel, 0)
+		for i := 0; i < GoShardingDatasourceNumber; i++ {
+			db := DBPool[fmt.Sprintf("ds_%d", i)]["r"]
+			for j := 0; j < GoShardingTableNumber; j++ {
+				table = fmt.Sprintf("event_%d", j)
+
+				wherestr := make([]string, 0)
+				cvs := make([]interface{}, 0)
+				for k, v := range conds {
+					wherestr = append(wherestr, k + "=?")
+					cvs = append(cvs, v)
+				}
+				sql := fmt.Sprintf("SELECT * FROM %s WHERE %s", table, strings.Join(wherestr, " AND "))
+				// if m.OdB != "" {
+				// 	sql = sql + " ORDER BY " + m.OdB
+				// }
+				// if m.Lmt > 0 {
+				// 	sql = sql + fmt.Sprintf(" LIMIT %d", m.Lmt)
+				// }
+				// if m.Ofs > 0 {
+				// 	sql = sql + fmt.Sprintf(" OFFSET %d", m.Ofs)
+				// }
+				if GoShardingSqlLog {
+					fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, cvs)
+				}
+				st := time.Now().UnixNano() / 1e6
+				rows, err := db.Query(sql, cvs...)
+				defer func() {
+					if rows != nil {
+						rows.Close() //关闭掉未scan的sql连接
+					}
+				}()
+				if err != nil {
+					fmt.Printf("Query data failed, err:%v\n", err)
+					return nil, err
+				}
+				
+				for rows.Next() {
+					m = new(EventModel)
+					err = rows.Scan(&m.ID, &m.Uid, &m.Event, &m.CreatedAt) //不scan会导致连接不释放
+					if err != nil {
+						return nil, err
+					}
+					m.Datasource = ds
+					m.Table = table
+					ms = append(ms, m)
+				}
+				e := time.Now().UnixNano()/1e6 - st
+				if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
+					fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
+				}
+			}
+		}
+		return ms, nil
 	}
-	e := time.Now().UnixNano()/1e6 - st
-	if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
-		fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
-	}
-	return ms, nil
 }
 
 func (m *EventModel) Create(props map[string]interface{}) (*EventModel, error) {
@@ -452,92 +511,118 @@ func (m *EventModel) Update(props map[string]interface{}, conds map[string]inter
 }
 
 func (m *EventModel) CountAll() (int, error) {
-	// todo
-	db := DBPool[m.Datasource]["r"]
-	sql := "SELECT count(1) FROM event"
-	if GoShardingSqlLog {
-		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql)
+	// No Sharding Column,  Count Across All Databases & Tables
+	cc := 0
+	for i := 0; i < GoShardingDatasourceNumber; i++ {
+		db := DBPool[fmt.Sprintf("ds_%d", i)]["r"]
+		for j := 0; j < GoShardingTableNumber; j++ {
+			table := fmt.Sprintf("event_%d", j)
+			sql := fmt.Sprintf("SELECT count(1) FROM %s", table)
+			if GoShardingSqlLog {
+				fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql)
+			}
+			st := time.Now().UnixNano() / 1e6
+			row := db.QueryRow(sql)
+			var c int
+			if err := row.Scan(&c); err != nil {
+				return 0, err
+			}
+			e := time.Now().UnixNano()/1e6 - st
+			if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
+				fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
+			}
+			cc = cc + c
+		}
 	}
-	st := time.Now().UnixNano() / 1e6
-	row := db.QueryRow(sql)
-	var c int
-	if err := row.Scan(&c); err != nil {
-		return 0, err
-	}
-	e := time.Now().UnixNano()/1e6 - st
-	if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
-		fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
-	}
-	return c, nil
+	return cc, nil
 }
 
 func (m *EventModel) Count(conds map[string]interface{}) (int, error) {
-	// todo
-	db := DBPool[m.Datasource]["r"]
-	wherestr := make([]string, 0)
-	cvs := make([]interface{}, 0)
-	for k, v := range conds {
-		wherestr = append(wherestr, k + "=?")
-		cvs = append(cvs, v)
+	cc := 0
+	var ds, table string
+	if sid, ok := conds[GoShardingColumn]; ok {
+		ds_fix := sid.(int64)  / int64(GoShardingTableNumber) % int64(GoShardingDatasourceNumber)
+		table_fix := sid.(int64) % int64(GoShardingTableNumber)
+		ds = fmt.Sprintf("ds_%d", ds_fix)
+		table = fmt.Sprintf("event_%d", table_fix)
+	
+		m.Datasource = ds
+		m.Table = table
+		db := DBPool[ds]["r"]
+
+		wherestr := make([]string, 0)
+		cvs := make([]interface{}, 0)
+		for k, v := range conds {
+			wherestr = append(wherestr, k + "=?")
+			cvs = append(cvs, v)
+		}
+		sql := fmt.Sprintf("SELECT count(1) FROM %s WHERE %s", table, strings.Join(wherestr, " AND "))
+		if GoShardingSqlLog {
+			fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, cvs)
+		}
+		st := time.Now().UnixNano() / 1e6
+		row := db.QueryRow(sql, cvs...)
+		var c int
+		if err := row.Scan(&c); err != nil {
+			return 0, err
+		}
+		e := time.Now().UnixNano()/1e6 - st
+		if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
+			fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
+		}
+		cc = c
+	} else {
+		// No Sharding Column,  Count Across All Databases & Tables
+		for i := 0; i < GoShardingDatasourceNumber; i++ {
+			db := DBPool[fmt.Sprintf("ds_%d", i)]["r"]
+			for j := 0; j < GoShardingTableNumber; j++ {
+				table = fmt.Sprintf("event_%d", j)
+				wherestr := make([]string, 0)
+				cvs := make([]interface{}, 0)
+				for k, v := range conds {
+					wherestr = append(wherestr, k + "=?")
+					cvs = append(cvs, v)
+				}
+				sql := fmt.Sprintf("SELECT count(1) FROM %s WHERE %s", table, strings.Join(wherestr, " AND "))
+				if GoShardingSqlLog {
+					fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, cvs)
+				}
+				st := time.Now().UnixNano() / 1e6
+				row := db.QueryRow(sql, cvs...)
+				var c int
+				if err := row.Scan(&c); err != nil {
+					return 0, err
+				}
+				e := time.Now().UnixNano()/1e6 - st
+				if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
+					fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
+				}
+				cc = cc + c
+			}
+		}
 	}
-	sql := fmt.Sprintf("SELECT count(1) FROM event WHERE %s", strings.Join(wherestr, " AND "))
-	if GoShardingSqlLog {
-		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql, cvs)
-	}
-	st := time.Now().UnixNano() / 1e6
-	row := db.QueryRow(sql, cvs...)
-	var c int
-	if err := row.Scan(&c); err != nil {
-		return 0, err
-	}
-	e := time.Now().UnixNano()/1e6 - st
-	if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
-		fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
-	}
-	return c, nil
+	return cc, nil
 }
 
-func (m *EventModel) All() ([]*EventModel, error) {
-	// todo
-	db := DBPool[m.Datasource]["r"]
-	sql := "SELECT * FROM event"
-	if m.OdB != "" {
-		sql = sql + " ORDER BY " + m.OdB
-	}
-	if m.Lmt > 0 {
-		sql = sql + fmt.Sprintf(" LIMIT %d", m.Lmt)
-	}
-	if m.Ofs > 0 {
-		sql = sql + fmt.Sprintf(" OFFSET %d", m.Ofs)
-	}
-	if GoShardingSqlLog {
-		fmt.Println("["+time.Now().Format("2006-01-02 15:04:05")+"][SQL]", sql)
-	}
-	st := time.Now().UnixNano() / 1e6
-	rows, err := db.Query(sql)
-	defer func() {
-		if rows != nil {
-			rows.Close() //关闭掉未scan的sql连接
-		}
-	}()
-	if err != nil {
-		fmt.Printf("Query data failed, err:%v\n", err)
-		return nil, err
-	}
-	ms := make([]*EventModel, 0)
-	for rows.Next() {
-		m = new(EventModel)
-		err = rows.Scan(&m.ID, &m.Uid, &m.Event, &m.CreatedAt) //不scan会导致连接不释放
-		if err != nil {
-			return nil, err
-		}
-		ms = append(ms, m)
-	}
-	e := time.Now().UnixNano()/1e6 - st
-	if GoShardingSlowSqlLog > 0 && int(e) >= GoShardingSlowSqlLog {
-		fmt.Printf("["+time.Now().Format("2006-01-02 15:04:05")+"][SlowSQL][%s][%dms]\n", sql, e)
-	}
-	return ms, nil
+func (m *EventModel) OrderBy(o string) *EventModel {
+	m.OdB = o
+	return m
+}
+
+func (m *EventModel) Offset(o int) *EventModel {
+	m.Ofs = o
+	return m
+}
+
+func (m *EventModel) Limit(l int) *EventModel {
+	m.Lmt = l
+	return m
+}
+
+func (m *EventModel) Page(page int, size int) *EventModel {
+	m.Ofs = (page - 1)*size
+	m.Lmt = size
+	return m
 }
 
 var Event = EventModel{Datasource: "default", Table: "event", AutoID: ""}
