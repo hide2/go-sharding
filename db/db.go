@@ -56,14 +56,16 @@ func init() {
 			return
 		}
 		wdb.SetConnMaxLifetime(100 * time.Second) //最大连接周期，超时的连接就close
-		wdb.SetMaxOpenConns(100)                  //设置最大连接数
+		wdb.SetMaxIdleConns(100)                  //设置最大Idle连接数
+		wdb.SetMaxOpenConns(100)                  //设置最大Open连接数
 		rdb, err := sql.Open("mysql", ds.Read)
 		if err != nil {
 			fmt.Println("Connection to mysql failed:", err)
 			return
 		}
 		rdb.SetConnMaxLifetime(100 * time.Second) //最大连接周期，超时的连接就close
-		rdb.SetMaxOpenConns(100)                  //设置最大连接数
+		wdb.SetMaxIdleConns(100)                  //设置最大Idle连接数
+		wdb.SetMaxOpenConns(100)                  //设置最大Open连接数
 
 		DBPool[ds.Name] = make(map[string]*sql.DB)
 		DBPool[ds.Name]["w"] = wdb
