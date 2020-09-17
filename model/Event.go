@@ -8,7 +8,6 @@ import (
 	"strings"
 	"errors"
 	"time"
-
 	"fmt"
 )
 
@@ -22,7 +21,6 @@ type EventModel struct {
 	AutoID     string
 	Trx        *Tx
 	ID         int64
-
 	Uid int64
 	Event string
 	CreatedAt time.Time
@@ -92,7 +90,6 @@ func (m *EventModel) CreateTable() error {
 			table := fmt.Sprintf("event_%d", j)
 			sql := fmt.Sprintf(`CREATE TABLE %s (
 		id BIGINT AUTO_INCREMENT,
-
 		uid BIGINT,
 		event VARCHAR(255),
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,

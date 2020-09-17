@@ -25,7 +25,7 @@ import (
 	"strings"
 	"errors"
 	"time"
-{{ range $i, $m := .Imports }}
+{{- range $i, $m := .Imports }}
 	"{{$m}}"
 {{- end }}
 )
@@ -40,7 +40,7 @@ type {{.Model}}Model struct {
 	AutoID     string
 	Trx        *Tx
 	ID         int64
-{{ range $i, $k := .Attrs }}
+{{- range $i, $k := .Attrs }}
 	{{$k}} {{index $.Values $i}}
 {{- end }}
 }
@@ -109,7 +109,7 @@ func (m *{{.Model}}Model) CreateTable() error {
 			table := fmt.Sprintf("{{.Table}}_%d", j)
 			sql := ` + "fmt.Sprintf(`" + `CREATE TABLE %s (
 		id BIGINT AUTO_INCREMENT,
-{{ range $i, $k := .Keys }}
+{{- range $i, $k := .Keys }}
 		{{$k}} {{index $.Columns $i}},
 {{- end }}
 		PRIMARY KEY (id)

@@ -8,7 +8,6 @@ import (
 	"strings"
 	"errors"
 	"time"
-
 	"fmt"
 )
 
@@ -22,7 +21,6 @@ type UserModel struct {
 	AutoID     string
 	Trx        *Tx
 	ID         int64
-
 	Uid int64
 	Name string
 	CreatedAt time.Time
@@ -92,7 +90,6 @@ func (m *UserModel) CreateTable() error {
 			table := fmt.Sprintf("user_%d", j)
 			sql := fmt.Sprintf(`CREATE TABLE %s (
 		id BIGINT AUTO_INCREMENT,
-
 		uid BIGINT,
 		name VARCHAR(255),
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
