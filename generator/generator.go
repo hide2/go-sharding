@@ -733,7 +733,7 @@ func Gen() {
 					c = "BIGINT"
 					autoid = Camelize(v.Key.(string))
 				} else if c == "time.Time" {
-					c = "DATETIME"
+					c = "DATETIME DEFAULT CURRENT_TIMESTAMP"
 					// imports = append(imports, "time")
 				}
 				columns = append(columns, c)

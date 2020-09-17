@@ -95,7 +95,7 @@ func (m *UserModel) CreateTable() error {
 
 		uid BIGINT,
 		name VARCHAR(255),
-		created_at DATETIME,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`, table)
 			if GoShardingSqlLog {
