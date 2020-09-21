@@ -12,18 +12,18 @@ import (
 )
 
 type UserModel struct {
-	OdB        string
-	Lmt        int
-	Ofs        int
+	OdB        string `json:"-"`
+	Lmt        int `json:"-"`
+	Ofs        int `json:"-"`
 	
-	Datasource string
-	Table      string
-	AutoID     string
-	Trx        *Tx
-	ID         int64
-	Uid int64
-	Name string
-	CreatedAt time.Time
+	Datasource string `json:"-"`
+	Table      string `json:"-"`
+	AutoID     string `json:"-"`
+	Trx        *Tx `json:"-"`
+	ID         int64 `json:"id"`
+	Uid int64 `json:"uid"`
+	Name string `json:"name"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 func (m *UserModel) Begin(ds string) error {
